@@ -1,0 +1,548 @@
+/**
+ * WooCommerce Comprehensive Monitor - Admin CSS
+ */
+
+/* Dashboard Styles */
+.wcm-dashboard {
+    max-width: 1400px;
+}
+
+.wcm-dashboard-header {
+    display: flex;
+    gap: 30px;
+    margin: 20px 0;
+    align-items: flex-start;
+}
+
+.wcm-health-overview {
+    flex: 2;
+}
+
+.wcm-quick-actions {
+    flex: 1;
+    background: #f5f5f5;
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+}
+
+.wcm-quick-actions h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+}
+
+.wcm-quick-actions .button {
+    display: block;
+    width: 100%;
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+.wcm-dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 20px;
+    margin-top: 30px;
+}
+
+.wcm-card {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.wcm-card h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #f0f0f0;
+}
+
+/* Health Score Circles */
+.score-circle,
+.score-circle-large,
+.score-circle-medium {
+    position: relative;
+    background: conic-gradient(#4CAF50 0% var(--score, 0%), #f0f0f0 var(--score, 0%) 100%);
+    border-radius: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.score-circle {
+    width: 100px;
+    height: 100px;
+    margin: 0 auto;
+}
+
+.score-circle-large {
+    width: 150px;
+    height: 150px;
+}
+
+.score-circle-medium {
+    width: 120px;
+    height: 120px;
+    margin: 0 auto 20px;
+}
+
+.score-circle .score,
+.score-circle-large .score,
+.score-circle-medium .score {
+    font-size: 24px;
+    font-weight: bold;
+    color: #333;
+}
+
+.score-circle-large .score {
+    font-size: 36px;
+}
+
+.score-circle-medium .score {
+    font-size: 28px;
+}
+
+.score-circle .label,
+.score-circle-large .label,
+.score-circle-medium .label {
+    font-size: 14px;
+    color: #666;
+}
+
+.score-circle-large .label {
+    font-size: 18px;
+}
+
+.score-circle-medium .label {
+    font-size: 16px;
+}
+
+/* Health Score Cards */
+.wcm-health-score-card {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    background: #f9f9f9;
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+}
+
+.health-score-details h3 {
+    margin: 0 0 5px 0;
+}
+
+.health-score-details p {
+    margin: 0;
+    color: #666;
+}
+
+/* Stats Grid */
+.wcm-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 15px;
+    margin: 20px 0;
+}
+
+.wcm-stats .stat {
+    background: #f5f5f5;
+    padding: 15px;
+    border-radius: 4px;
+    text-align: center;
+}
+
+.wcm-stats .stat-value {
+    display: block;
+    font-size: 24px;
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 5px;
+}
+
+.wcm-stats .stat-label {
+    display: block;
+    font-size: 12px;
+    color: #666;
+    text-transform: uppercase;
+}
+
+/* Status Lists */
+.wcm-status-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.wcm-status-list li {
+    padding: 10px 0;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.wcm-status-list li:last-child {
+    border-bottom: none;
+}
+
+.wcm-status-list .dashicons {
+    width: 20px;
+    height: 20px;
+    font-size: 20px;
+}
+
+.wcm-status-list .dashicons-yes {
+    color: #4CAF50;
+}
+
+.wcm-status-list .dashicons-no {
+    color: #F44336;
+}
+
+/* Tables */
+.wcm-dashboard table.wp-list-table {
+    margin-top: 0;
+}
+
+.wcm-dashboard table.wp-list-table th,
+.wcm-dashboard table.wp-list-table td {
+    padding: 8px 10px;
+    font-size: 13px;
+}
+
+.wcm-dashboard table.wp-list-table th {
+    font-weight: 600;
+}
+
+.wcm-dashboard .text-right {
+    text-align: right;
+    margin-top: 10px;
+}
+
+.wcm-dashboard .text-right a {
+    text-decoration: none;
+    color: #2271b1;
+}
+
+.wcm-dashboard .text-right a:hover {
+    text-decoration: underline;
+}
+
+/* Header Sections */
+.wcm-health-header,
+.wcm-errors-header,
+.wcm-disputes-header {
+    background: #f9f9f9;
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    margin-bottom: 20px;
+}
+
+.wcm-health-stats {
+    display: flex;
+    gap: 30px;
+    margin-top: 20px;
+}
+
+.wcm-health-stats .stat {
+    text-align: center;
+    padding: 15px;
+    background: white;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+    min-width: 100px;
+}
+
+.wcm-health-stats .stat-value {
+    display: block;
+    font-size: 28px;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.wcm-health-stats .stat-label {
+    display: block;
+    font-size: 12px;
+    color: #666;
+    text-transform: uppercase;
+}
+
+.wcm-health-actions {
+    display: flex;
+    gap: 10px;
+    margin: 20px 0;
+}
+
+/* Error Stats */
+.wcm-error-stats {
+    display: flex;
+    gap: 30px;
+    margin: 20px 0;
+}
+
+.wcm-error-stats .stat {
+    text-align: center;
+    padding: 15px;
+    background: white;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+    min-width: 120px;
+}
+
+.wcm-error-stats .stat-value {
+    display: block;
+    font-size: 28px;
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 5px;
+}
+
+.wcm-error-stats .stat-label {
+    display: block;
+    font-size: 12px;
+    color: #666;
+    text-transform: uppercase;
+}
+
+/* Settings Page */
+.wcm-settings-content {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    margin-top: 20px;
+}
+
+.wcm-settings .form-table th {
+    width: 200px;
+    padding: 20px 10px 20px 0;
+}
+
+.wcm-settings .form-table td {
+    padding: 15px 10px;
+}
+
+.wcm-settings .description {
+    margin-top: 5px;
+    color: #666;
+}
+
+.wcm-settings .wcm-coverage-info,
+.wcm-settings .wcm-webhook-info {
+    background: #f9f9f9;
+    padding: 15px;
+    border-radius: 4px;
+    border: 1px solid #e0e0e0;
+}
+
+.wcm-settings .wcm-coverage-info ul,
+.wcm-settings .wcm-webhook-info ol {
+    margin: 10px 0 10px 20px;
+}
+
+.wcm-settings .wcm-coverage-info li,
+.wcm-settings .wcm-webhook-info li {
+    margin-bottom: 5px;
+}
+
+.wcm-settings code {
+    background: #f5f5f5;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-family: monospace;
+}
+
+/* Tab Navigation */
+.nav-tab-wrapper {
+    margin-bottom: 0;
+    border-bottom: 1px solid #ddd;
+}
+
+.nav-tab {
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    border: 1px solid #ddd;
+    border-bottom: none;
+    background: #f5f5f5;
+    margin-bottom: -1px;
+}
+
+.nav-tab:hover {
+    background: #f0f0f0;
+}
+
+.nav-tab-active {
+    background: white;
+    border-bottom: 1px solid white;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+    .wcm-dashboard-header {
+        flex-direction: column;
+    }
+    
+    .wcm-quick-actions {
+        width: 100%;
+    }
+}
+
+@media (max-width: 782px) {
+    .wcm-dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .wcm-health-score-card {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .wcm-health-stats,
+    .wcm-error-stats {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .wcm-health-stats .stat,
+    .wcm-error-stats .stat {
+        min-width: auto;
+    }
+    
+    .wcm-settings .form-table th {
+        width: auto;
+        display: block;
+        padding: 10px 0;
+    }
+    
+    .wcm-settings .form-table td {
+        display: block;
+        padding: 0 0 20px 0;
+    }
+}
+
+/* Animation for health score circles */
+@keyframes scoreFill {
+    from {
+        --score: 0%;
+    }
+    to {
+        --score: var(--target-score);
+    }
+}
+
+.score-circle,
+.score-circle-large,
+.score-circle-medium {
+    animation: scoreFill 1s ease-out forwards;
+}
+
+/* Custom notice styles */
+.wcm-notice {
+    position: relative;
+    padding-right: 38px;
+}
+
+.wcm-notice .notice-dismiss {
+    position: absolute;
+    top: 0;
+    right: 1px;
+    border: none;
+    margin: 0;
+    padding: 9px;
+    background: none;
+    color: #787c82;
+    cursor: pointer;
+}
+
+.wcm-notice .notice-dismiss:before {
+    background: none;
+    color: #787c82;
+    content: "\f153";
+    display: block;
+    font: normal 16px/20px dashicons;
+    speak: never;
+    height: 20px;
+    text-align: center;
+    width: 20px;
+    -webkit-font-smoothing: antialiased;
+}
+
+.wcm-notice .notice-dismiss:hover:before {
+    color: #d63638;
+}
+
+/* Button styles */
+.button .dashicons {
+    vertical-align: middle;
+    margin-right: 5px;
+}
+
+/* Modal styles */
+.wcm-modal {
+    animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* Loading states */
+.button[disabled] {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Tooltips */
+.wcm-tooltip {
+    position: relative;
+    display: inline-block;
+    cursor: help;
+}
+
+.wcm-tooltip .wcm-tooltip-text {
+    visibility: hidden;
+    width: 200px;
+    background-color: #333;
+    color: #fff;
+    text-align: center;
+    border-radius: 6px;
+    padding: 5px;
+    position: absolute;
+    z-index: 1;
+    bottom: 125%;
+    left: 50%;
+    margin-left: -100px;
+    opacity: 0;
+    transition: opacity 0.3s;
+    font-size: 12px;
+    font-weight: normal;
+}
+
+.wcm-tooltip:hover .wcm-tooltip-text {
+    visibility: visible;
+    opacity: 1;
+}
+
+.wcm-tooltip .wcm-tooltip-text::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: #333 transparent transparent transparent;
+}
