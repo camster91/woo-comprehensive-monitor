@@ -30,6 +30,7 @@ require_once WCM_PLUGIN_DIR . 'includes/class-wcm-dispute-manager.php';
 require_once WCM_PLUGIN_DIR . 'includes/class-wcm-error-tracker.php';
 require_once WCM_PLUGIN_DIR . 'includes/class-wcm-health-monitor.php';
 require_once WCM_PLUGIN_DIR . 'includes/class-wcm-admin-dashboard.php';
+require_once WCM_PLUGIN_DIR . 'includes/class-wcm-subscription-manager-wps.php';
 
 /**
  * Main plugin class
@@ -41,6 +42,7 @@ class WooComprehensiveMonitor {
     private $error_tracker;
     private $health_monitor;
     private $admin_dashboard;
+    private $subscription_manager;
 
     /**
      * Get singleton instance
@@ -97,6 +99,7 @@ class WooComprehensiveMonitor {
         $this->error_tracker = new WCM_Error_Tracker();
         $this->health_monitor = new WCM_Health_Monitor();
         $this->admin_dashboard = new WCM_Admin_Dashboard();
+        $this->subscription_manager = new WCM_Subscription_Manager_WPS();
     }
 
     /**
@@ -249,6 +252,13 @@ class WooComprehensiveMonitor {
      */
     public function get_admin_dashboard() {
         return $this->admin_dashboard;
+    }
+
+    /**
+     * Get subscription manager instance
+     */
+    public function get_subscription_manager() {
+        return $this->subscription_manager;
     }
 }
 

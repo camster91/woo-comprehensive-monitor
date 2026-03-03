@@ -23,10 +23,17 @@ A comprehensive plugin that combines error tracking, dispute protection, and hea
 - **Scheduled Checks**: Automatically runs health checks on a schedule
 
 ### 📊 Admin Dashboard
-- **Unified Dashboard**: See errors, disputes, and health status in one place
+- **Unified Dashboard**: See errors, disputes, health status, and subscription stats in one place
 - **Real-time Updates**: Dashboard auto-refreshes every 60 seconds
 - **Quick Actions**: Run health checks and send test alerts with one click
 - **Detailed Logs**: View all errors, disputes, and health check results
+
+### 🔄 Subscription Management (WPSubscription)
+- **Search Subscriptions**: Search by ID, customer email, or name with status filtering
+- **View Details**: Complete subscription information including products, billing, and orders
+- **Manage Subscriptions**: Cancel subscriptions, update status, add notes
+- **Statistics**: Subscription counts, active revenue, upcoming renewals
+- **Health Integration**: Subscription status included in store health checks
 
 ## Installation
 
@@ -94,6 +101,14 @@ A comprehensive plugin that combines error tracking, dispute protection, and hea
   - See detailed health score breakdown
   - Run manual health checks
 
+### Subscription Management
+- **Subscriptions Page**: WC Monitor → Subscriptions
+  - Search and filter subscriptions
+  - View detailed subscription information
+  - Manage subscription status
+  - Add subscription notes
+  - View related orders
+
 ## Health Checks Performed
 
 The plugin performs the following health checks:
@@ -144,6 +159,12 @@ The plugin performs the following health checks:
     - Tax calculation enabled
     - Prices include tax setting
 
+11. **WPSubscription Status** (if WPSubscription is active)
+    - Total subscriptions count
+    - Active subscriptions count
+    - Failed payment attempts
+    - Subscriptions ending soon
+
 ## Alert Types
 
 The plugin sends alerts for:
@@ -171,6 +192,11 @@ The plugin sends alerts for:
 - Dispute evidence generated
 - Dispute status updates
 
+### Subscriptions
+- Subscription cancellations
+- Subscription status changes
+- Failed renewal attempts
+
 ## Integration with Monitoring Server
 
 The plugin sends data to your central monitoring server (like `https://woo.ashbi.ca`). The server should have endpoints to receive:
@@ -185,6 +211,10 @@ The plugin sends data to your central monitoring server (like `https://woo.ashbi
 - WooCommerce 5.0 or higher
 - PHP 7.4 or higher
 - MySQL 5.6 or higher
+
+### Optional Dependencies
+- **WPSubscription** (for subscription management features)
+- **Stripe for WooCommerce** (for dispute protection features)
 
 ## Recommended Setup
 
@@ -217,7 +247,8 @@ woo-comprehensive-monitor/
 │   ├── class-wcm-dispute-manager.php
 │   ├── class-wcm-error-tracker.php
 │   ├── class-wcm-health-monitor.php
-│   └── class-wcm-admin-dashboard.php
+│   ├── class-wcm-admin-dashboard.php
+│   └── class-wcm-subscription-manager-wps.php  # WPSubscription integration
 ├── languages/               # Translation files
 ├── woo-comprehensive-monitor.php  # Main plugin file
 └── README.md
@@ -259,6 +290,10 @@ Developed by [Ashbi](https://ashbi.ca)
 - Real-time error reporting
 - Automatic dispute evidence generation
 - Scheduled health checks
+- **Added**: WPSubscription integration for subscription management
+- **Added**: Subscription search, view, and management features
+- **Added**: Subscription health checks and dashboard statistics
+- **Added**: Subscription cancellation alerts to monitoring server
 
 ## Roadmap
 
