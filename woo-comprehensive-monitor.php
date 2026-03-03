@@ -69,6 +69,9 @@ class WooComprehensiveMonitor {
         register_activation_hook(__FILE__, array($this, 'activate'));
         register_deactivation_hook(__FILE__, array($this, 'deactivate'));
 
+        // Show welcome notice after activation
+        add_action('admin_notices', array($this, 'show_activation_notice'));
+        
         // Initialize components
         add_action('plugins_loaded', array($this, 'init_components'));
         
@@ -77,6 +80,11 @@ class WooComprehensiveMonitor {
         
         // Add settings link
         add_filter('plugin_action_links_' . WCM_PLUGIN_BASENAME, array($this, 'add_settings_link'));
+        
+        // Set activation transient
+        if (get_option('wcm_auto_connected') === '1' && !get_transient('wcm_show_welcome_notice')) {
+            set_transient('wcm_show_welcome_notice', true, 60); // Show for 1 minute
+        }
     }
 
     /**
@@ -114,7 +122,7 @@ class WooComprehensiveMonitor {
     }
 
     /**
-     * Plugin activation
+     * Plugin activation with auto-connect
      */
     public function activate() {
         // Create database tables
@@ -173,17 +181,107 @@ class WooComprehensiveMonitor {
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
         dbDelta($sql);
         
+        // Auto-configure plugin with smart defaults
+        $this->auto_configure_plugin();
+        
+        // Send activation notice to monitoring server
+        $this->send_activation_notice();
+    }
+    
+    /**
+     * Auto-configure plugin with smart defaults
+     */
+    private function auto_configure_plugin() {
+        // Set monitoring server URL
+        $monitoring_server = 'https://woo.ashbi.ca/api/track-woo-error';
+        
+        // Check if we should use a different server based on environment
+        if (defined('WCM_MONITORING_SERVER')) {
+            $monitoring_server = WCM_MONITORING_SERVER;
+        } elseif (getenv('WCM_MONITORING_SERVER')) {
+            $monitoring_server = getenv('WCM_MONITORING_SERVER');
+        }
+        
         // Set default options
-        add_option('wcm_monitoring_server', 'https://woo.ashbi.ca/api/track-woo-error');
-        add_option('wcm_track_js_errors', '1');
-        add_option('wcm_track_ajax_errors', '1');
-        add_option('wcm_track_checkout_errors', '1');
-        add_option('wcm_alert_email', get_option('admin_email'));
-        add_option('wcm_enable_dispute_protection', '1');
-        add_option('wcm_auto_generate_evidence', '1');
-        add_option('wcm_send_dispute_alerts', '1');
-        add_option('wcm_enable_health_monitoring', '1');
-        add_option('wcm_health_check_interval', '3600'); // 1 hour
+        $defaults = array(
+            'wcm_monitoring_server' => $monitoring_server,
+            'wcm_track_js_errors' => '1',
+            'wcm_track_ajax_errors' => '1',
+            'wcm_track_checkout_errors' => '1',
+            'wcm_alert_email' => get_option('admin_email'),
+            'wcm_enable_dispute_protection' => class_exists('WC_Stripe') ? '1' : '0',
+            'wcm_auto_generate_evidence' => '1',
+            'wcm_send_dispute_alerts' => '1',
+            'wcm_enable_health_monitoring' => '1',
+            'wcm_health_check_interval' => '3600', // 1 hour
+            'wcm_store_id' => $this->generate_store_id(),
+            'wcm_auto_connected' => '1',
+            'wcm_connection_time' => current_time('mysql'),
+            'wcm_plugin_version' => WCM_VERSION,
+        );
+        
+        foreach ($defaults as $key => $value) {
+            if (!get_option($key)) {
+                add_option($key, $value);
+            }
+        }
+        
+        // Schedule health checks
+        if (!wp_next_scheduled('wcm_daily_health_check')) {
+            wp_schedule_event(time(), 'hourly', 'wcm_daily_health_check');
+        }
+        
+        // Schedule dispute checks
+        if (!wp_next_scheduled('wcm_hourly_dispute_check')) {
+            wp_schedule_event(time(), 'hourly', 'wcm_hourly_dispute_check');
+        }
+    }
+    
+    /**
+     * Generate unique store ID
+     */
+    private function generate_store_id() {
+        $site_url = get_site_url();
+        $store_name = get_bloginfo('name');
+        
+        // Create a unique but readable store ID
+        $store_id = 'store-' . substr(md5($site_url), 0, 8) . '-' . time();
+        
+        // Make it URL-safe
+        $store_id = sanitize_title($store_id);
+        
+        return $store_id;
+    }
+    
+    /**
+     * Send activation notice to monitoring server
+     */
+    private function send_activation_notice() {
+        $monitoring_server = get_option('wcm_monitoring_server', 'https://woo.ashbi.ca/api/track-woo-error');
+        
+        $activation_data = array(
+            'type' => 'plugin_activated',
+            'store_url' => get_site_url(),
+            'store_name' => get_bloginfo('name'),
+            'store_id' => get_option('wcm_store_id'),
+            'plugin_version' => WCM_VERSION,
+            'woocommerce_version' => defined('WC_VERSION') ? WC_VERSION : 'Not active',
+            'wordpress_version' => get_bloginfo('version'),
+            'php_version' => phpversion(),
+            'timestamp' => current_time('mysql'),
+        );
+        
+        // Send activation notice (non-blocking)
+        wp_remote_post($monitoring_server, array(
+            'method' => 'POST',
+            'timeout' => 5,
+            'redirection' => 2,
+            'httpversion' => '1.0',
+            'blocking' => false,
+            'headers' => array('Content-Type' => 'application/json'),
+            'body' => json_encode($activation_data),
+            'data_format' => 'body',
+        ));
     }
 
     /**
@@ -193,6 +291,69 @@ class WooComprehensiveMonitor {
         // Clear scheduled events
         wp_clear_scheduled_hook('wcm_daily_health_check');
         wp_clear_scheduled_hook('wcm_hourly_dispute_check');
+        
+        // Send deactivation notice
+        $this->send_deactivation_notice();
+    }
+    
+    /**
+     * Send deactivation notice to monitoring server
+     */
+    private function send_deactivation_notice() {
+        $monitoring_server = get_option('wcm_monitoring_server', 'https://woo.ashbi.ca/api/track-woo-error');
+        
+        $deactivation_data = array(
+            'type' => 'plugin_deactivated',
+            'store_url' => get_site_url(),
+            'store_name' => get_bloginfo('name'),
+            'store_id' => get_option('wcm_store_id'),
+            'timestamp' => current_time('mysql'),
+        );
+        
+        wp_remote_post($monitoring_server, array(
+            'method' => 'POST',
+            'timeout' => 5,
+            'redirection' => 2,
+            'httpversion' => '1.0',
+            'blocking' => false,
+            'headers' => array('Content-Type' => 'application/json'),
+            'body' => json_encode($deactivation_data),
+            'data_format' => 'body',
+        ));
+    }
+    
+    /**
+     * Show welcome notice after activation
+     */
+    public function show_activation_notice() {
+        if (get_transient('wcm_show_welcome_notice')) {
+            $store_id = get_option('wcm_store_id');
+            $monitoring_server = get_option('wcm_monitoring_server');
+            
+            ?>
+            <div class="notice notice-success is-dismissible">
+                <div style="display: flex; align-items: center; gap: 15px; padding: 15px 0;">
+                    <div style="font-size: 32px;">🎉</div>
+                    <div>
+                        <h3 style="margin-top: 0;">WooCommerce Comprehensive Monitor Activated!</h3>
+                        <p>Your store is now connected to the monitoring server.</p>
+                        <p><strong>Store ID:</strong> <code><?php echo esc_html($store_id); ?></code></p>
+                        <p><strong>Monitoring Server:</strong> <code><?php echo esc_html($monitoring_server); ?></code></p>
+                        <p>
+                            <a href="<?php echo admin_url('admin.php?page=woo-comprehensive-monitor'); ?>" class="button button-primary">
+                                Go to Dashboard
+                            </a>
+                            <a href="<?php echo esc_url($monitoring_server . '/dashboard'); ?>" target="_blank" class="button">
+                                View Central Dashboard
+                            </a>
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <?php
+            
+            delete_transient('wcm_show_welcome_notice');
+        }
     }
 
     /**
