@@ -210,13 +210,30 @@ class WCM_Error_Tracker {
         
         set_transient( $key, $count + 1, HOUR_IN_SECONDS );
         
-        // Sanitize input
-        $error_type     = isset( $_POST['error_type'] ) ? sanitize_text_field( wp_unslash( $_POST['error_type'] ) ) : '';
-        $error_message  = isset( $_POST['error_message'] ) ? sanitize_textarea_field( wp_unslash( $_POST['error_message'] ) ) : '';
-        $page_url       = isset( $_POST['page_url'] ) ? esc_url_raw( wp_unslash( $_POST['page_url'] ) ) : '';
-        $user_agent     = isset( $_POST['user_agent'] ) ? sanitize_text_field( wp_unslash( $_POST['user_agent'] ) ) : '';
-        $customer_email = isset( $_POST['customer_email'] ) ? sanitize_email( wp_unslash( $_POST['customer_email'] ) ) : '';
-        $order_id       = isset( $_POST['order_id'] ) ? absint( $_POST['order_id'] ) : 0;
+        // Check if error_data is sent as JSON string (from error-tracker.js fallback)
+        if ( isset( $_POST['error_data'] ) && is_string( $_POST['error_data'] ) ) {
+            $error_data = json_decode( wp_unslash( $_POST['error_data'] ), true );
+            if ( json_last_error() === JSON_ERROR_NONE && is_array( $error_data ) ) {
+                // Extract from JSON object
+                $error_type     = isset( $error_data['error_type'] ) ? sanitize_text_field( $error_data['error_type'] ) : '';
+                $error_message  = isset( $error_data['error_message'] ) ? sanitize_textarea_field( $error_data['error_message'] ) : '';
+                $page_url       = isset( $error_data['page_url'] ) ? esc_url_raw( $error_data['page_url'] ) : '';
+                $user_agent     = isset( $error_data['user_agent'] ) ? sanitize_text_field( $error_data['user_agent'] ) : '';
+                $customer_email = isset( $error_data['customer_email'] ) ? sanitize_email( $error_data['customer_email'] ) : '';
+                $order_id       = isset( $error_data['order_id'] ) ? absint( $error_data['order_id'] ) : 0;
+            } else {
+                wp_send_json_error( 'Invalid error_data JSON format', 400 );
+                wp_die();
+            }
+        } else {
+            // Legacy: individual POST fields
+            $error_type     = isset( $_POST['error_type'] ) ? sanitize_text_field( wp_unslash( $_POST['error_type'] ) ) : '';
+            $error_message  = isset( $_POST['error_message'] ) ? sanitize_textarea_field( wp_unslash( $_POST['error_message'] ) ) : '';
+            $page_url       = isset( $_POST['page_url'] ) ? esc_url_raw( wp_unslash( $_POST['page_url'] ) ) : '';
+            $user_agent     = isset( $_POST['user_agent'] ) ? sanitize_text_field( wp_unslash( $_POST['user_agent'] ) ) : '';
+            $customer_email = isset( $_POST['customer_email'] ) ? sanitize_email( wp_unslash( $_POST['customer_email'] ) ) : '';
+            $order_id       = isset( $_POST['order_id'] ) ? absint( $_POST['order_id'] ) : 0;
+        }
         
         if ( empty( $error_type ) || empty( $error_message ) ) {
             wp_send_json_error( 'Missing required fields', 400 );
