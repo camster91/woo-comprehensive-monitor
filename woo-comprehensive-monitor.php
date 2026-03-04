@@ -3,7 +3,7 @@
  * Plugin Name: WooCommerce Comprehensive Monitor & Dispute Protection
  * Plugin URI: https://ashbi.ca
  * Description: Complete WooCommerce monitoring, error tracking, dispute protection, and health alerts. Combines frontend monitoring, dispute evidence generation, and centralized health reporting.
- * Version: 3.0.0
+ * Version: 4.0.0
  * Author: Ashbi
  * Author URI: https://ashbi.ca
  * License: GPL2
@@ -149,26 +149,9 @@ class WooComprehensiveMonitor {
         
         $charset_collate = $wpdb->get_charset_collate();
         
-        // Dispute evidence table
-        $table_name = $wpdb->prefix . 'wcm_dispute_evidence';
-        $sql = "CREATE TABLE IF NOT EXISTS $table_name (
-            id bigint(20) NOT NULL AUTO_INCREMENT,
-            dispute_id varchar(100) NOT NULL,
-            order_id bigint(20) NOT NULL,
-            customer_email varchar(255) NOT NULL,
-            evidence_type varchar(50) NOT NULL,
-            evidence_data longtext NOT NULL,
-            created_at datetime DEFAULT CURRENT_TIMESTAMP,
-            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            PRIMARY KEY (id),
-            KEY dispute_id (dispute_id),
-            KEY order_id (order_id),
-            KEY customer_email (customer_email)
-        ) $charset_collate;";
-        
         // Error tracking table
         $table_name = $wpdb->prefix . 'wcm_error_logs';
-        $sql .= "CREATE TABLE IF NOT EXISTS $table_name (
+        $sql = "CREATE TABLE IF NOT EXISTS $table_name (
             id bigint(20) NOT NULL AUTO_INCREMENT,
             error_type varchar(100) NOT NULL,
             error_message text NOT NULL,
