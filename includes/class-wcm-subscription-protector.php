@@ -81,13 +81,15 @@ class WCM_Subscription_Protector {
      *
      * Uses REAL product data only — no guessing.
      *
-     * Sources (checked in order):
-     * 1. _wcm_onetime_price meta on the product/variation (explicit admin setting)
-     * 2. _wcm_onetime_price meta on the parent product
-     * 3. _wcm_onetime_product_id meta — linked one-time product, use its price
-     * 4. _wcm_onetime_product_id meta on the parent
+     * Sources (checked in order — linked variation first because it reads
+     * the real live WooCommerce price and stays in sync automatically):
      *
-     * Returns 0 if no one-time price is configured (charge will be skipped).
+     * 1. _wcm_onetime_product_id on the product — linked variation, reads its live price
+     * 2. _wcm_onetime_price on the product — explicit price override
+     * 3. _wcm_onetime_product_id on the parent product
+     * 4. _wcm_onetime_price on the parent product
+     *
+     * Returns 0 if nothing is configured (charge will be skipped).
      */
     public function get_onetime_price( $product ) {
         if ( ! $product instanceof WC_Product ) {
@@ -97,13 +99,7 @@ class WCM_Subscription_Protector {
             return 0;
         }
 
-        // 1. Explicit price on this product/variation
-        $override = $product->get_meta( '_wcm_onetime_price' );
-        if ( '' !== $override && false !== $override ) {
-            return (float) $override;
-        }
-
-        // 2. Linked one-time product on this product/variation
+        // 1. Linked one-time variation on this product (best — reads live price)
         $linked_id = $product->get_meta( '_wcm_onetime_product_id' );
         if ( $linked_id ) {
             $linked = wc_get_product( (int) $linked_id );
@@ -112,17 +108,18 @@ class WCM_Subscription_Protector {
             }
         }
 
-        // 3. Check parent product for override
+        // 2. Explicit price override on this product
+        $override = $product->get_meta( '_wcm_onetime_price' );
+        if ( '' !== $override && false !== $override ) {
+            return (float) $override;
+        }
+
+        // 3-4. Check parent product
         $parent_id = $product->get_parent_id();
         if ( $parent_id ) {
             $parent = wc_get_product( $parent_id );
             if ( $parent ) {
-                $parent_override = $parent->get_meta( '_wcm_onetime_price' );
-                if ( '' !== $parent_override && false !== $parent_override ) {
-                    return (float) $parent_override;
-                }
-
-                // 4. Linked one-time product on parent
+                // 3. Linked variation on parent
                 $parent_linked = $parent->get_meta( '_wcm_onetime_product_id' );
                 if ( $parent_linked ) {
                     $linked = wc_get_product( (int) $parent_linked );
@@ -130,10 +127,16 @@ class WCM_Subscription_Protector {
                         return (float) $linked->get_price();
                     }
                 }
+
+                // 4. Explicit price on parent
+                $parent_override = $parent->get_meta( '_wcm_onetime_price' );
+                if ( '' !== $parent_override && false !== $parent_override ) {
+                    return (float) $parent_override;
+                }
             }
         }
 
-        // No one-time price configured — return 0, charge will be skipped
+        // Nothing configured — skip this product
         return 0;
     }
 

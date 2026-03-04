@@ -461,13 +461,15 @@ class WCM_PreOrder {
             $stats['failed'] = (int) wc_orders_count( 'pre-order-fail' );
         }
 
-        // Count charged (completed orders that have preorder meta)
-        global $wpdb;
-        $stats['charged'] = (int) $wpdb->get_var(
-            "SELECT COUNT(DISTINCT p.ID) FROM {$wpdb->posts} p
-             JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
-             WHERE pm.meta_key = '_preorder_charge_status' AND pm.meta_value = 'charged'"
-        );
+        // Count charged — HPOS compatible
+        $charged_orders = wc_get_orders( array(
+            'limit'      => -1,
+            'return'     => 'ids',
+            'meta_query' => array(
+                array( 'key' => '_preorder_charge_status', 'value' => 'charged' ),
+            ),
+        ) );
+        $stats['charged'] = count( $charged_orders );
 
         return $stats;
     }

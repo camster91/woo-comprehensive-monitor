@@ -169,6 +169,19 @@ app.post("/api/track-woo-error", async (req, res) => {
     return res.status(200).json({ success: true });
   }
 
+  // --- Subscription price adjustment (from Subscription Protector) ---
+  if (type === 'subscription_price_adjustment') {
+    const triggers = { cancel_auto: 'Auto (cancellation)', convert_customer: 'Customer conversion', admin_manual: 'Admin manual' };
+    const triggerLabel = triggers[req.body.trigger] || req.body.trigger;
+    const emoji = req.body.status === 'charged' ? '💰' : '⏳';
+    const subject = `${emoji} PRICE ADJUSTMENT: ${req.body.store_name} — $${req.body.amount}`;
+    const message = `Subscription price adjustment.\n\nStore: ${req.body.store_name}\nSubscription: #${req.body.subscription_id}\nAmount: $${req.body.amount}\nStatus: ${req.body.status}\nTrigger: ${triggerLabel}\nTime: ${req.body.timestamp}`;
+    const siteObj = sites.find(s => s.url.includes(req.body.store_url) || req.body.store_url.includes(s.url));
+    const severity = req.body.status === 'charged' ? 'success' : 'medium';
+    await sendAlert(subject, message, siteObj ? siteObj.id : null, severity);
+    return res.status(200).json({ success: true });
+  }
+
   // --- Regular frontend error tracking ---
   const subject = `Frontend Issue on ${site}: ${type}`;
   const message = `A customer just hit a frontend issue!\nSite: ${site}\nURL: ${url || 'Unknown'}\nError Type: ${type}\nError Message: ${error_message}\nTime: ${time || new Date().toISOString()}`;
