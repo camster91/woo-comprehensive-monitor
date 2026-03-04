@@ -1,0 +1,30 @@
+/* PreOrder Frontend Styles */
+
+.wcm-preorder-info {
+    margin-top: 10px;
+    padding: 10px 15px;
+    background: #f8f9fa;
+    border-left: 3px solid #2271b1;
+    border-radius: 2px;
+}
+
+.wcm-preorder-date {
+    margin: 0 0 5px;
+    font-weight: 600;
+    color: #1d2327;
+}
+
+.wcm-preorder-message {
+    margin: 0;
+    color: #50575e;
+    font-style: italic;
+}
+
+.wcm-preorder-checkout-notice {
+    margin-bottom: 20px;
+}
+
+button.preorder-product,
+a.preorder-product {
+    position: relative;
+}

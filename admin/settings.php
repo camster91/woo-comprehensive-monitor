@@ -26,6 +26,8 @@ function wcm_render_settings_page() {
         'error_tracking' => __('Error Tracking', 'woo-comprehensive-monitor'),
         'dispute_protection' => __('Dispute Protection', 'woo-comprehensive-monitor'),
         'health_monitoring' => __('Health Monitoring', 'woo-comprehensive-monitor'),
+        'recovery' => __('Discount Recovery', 'woo-comprehensive-monitor'),
+        'preorders' => __('Pre-Orders', 'woo-comprehensive-monitor'),
         'alerts' => __('Alerts & Notifications', 'woo-comprehensive-monitor'),
         'advanced' => __('Advanced', 'woo-comprehensive-monitor'),
     );
@@ -60,6 +62,12 @@ function wcm_render_settings_page() {
                         break;
                     case 'health_monitoring':
                         wcm_render_health_monitoring_settings();
+                        break;
+                    case 'recovery':
+                        wcm_render_recovery_settings();
+                        break;
+                    case 'preorders':
+                        wcm_render_preorder_settings();
                         break;
                     case 'alerts':
                         wcm_render_alerts_settings();
@@ -163,6 +171,34 @@ function wcm_save_settings() {
         update_option('wcm_debug_mode', '1');
     } else {
         update_option('wcm_debug_mode', '0');
+    }
+    
+    // Recovery settings
+    if (isset($_POST['wcm_recovery_enabled'])) {
+        update_option('wcm_recovery_enabled', sanitize_text_field($_POST['wcm_recovery_enabled']));
+    }
+    if (isset($_POST['wcm_recovery_minimum_orders'])) {
+        update_option('wcm_recovery_minimum_orders', max(1, absint($_POST['wcm_recovery_minimum_orders'])));
+    }
+    if (isset($_POST['wcm_recovery_grace_period'])) {
+        update_option('wcm_recovery_grace_period', absint($_POST['wcm_recovery_grace_period']));
+    }
+    if (isset($_POST['wcm_recovery_charge_method'])) {
+        update_option('wcm_recovery_charge_method', sanitize_text_field($_POST['wcm_recovery_charge_method']));
+    }
+    $recovery_checkboxes = array('wcm_recovery_notify_customer', 'wcm_recovery_notify_admin');
+    foreach ($recovery_checkboxes as $opt) {
+        update_option($opt, isset($_POST[$opt]) ? 'yes' : 'no');
+    }
+    if (isset($_POST['wcm_recovery_exempt_roles'])) {
+        update_option('wcm_recovery_exempt_roles', array_map('sanitize_text_field', (array) $_POST['wcm_recovery_exempt_roles']));
+    } else {
+        update_option('wcm_recovery_exempt_roles', array());
+    }
+
+    // Acknowledgment settings
+    if (isset($_POST['wcm_acknowledgment_text'])) {
+        update_option('wcm_acknowledgment_text', sanitize_textarea_field($_POST['wcm_acknowledgment_text']));
     }
     
     add_settings_error(
@@ -440,4 +476,237 @@ function wcm_render_dispute_protection_settings() {
                         <li><?php _e('Click "Add endpoint" to save', 'woo-comprehensive-monitor'); ?></li>
                     </ol>
                     <p class="description">
-                        <?php _e('The web
+                        <?php _e('The webhook endpoint is automatically registered by this plugin.', 'woo-comprehensive-monitor'); ?>
+                    </p>
+                </div>
+            </td>
+        </tr>
+    </table>
+    <?php
+}
+
+/**
+ * Render health monitoring settings
+ */
+function wcm_render_health_monitoring_settings() {
+    $enable = get_option('wcm_enable_health_monitoring', '1');
+    $interval = get_option('wcm_health_check_interval', '3600');
+    ?>
+    <table class="form-table">
+        <tr>
+            <th scope="row"><?php _e('Health Monitoring', 'woo-comprehensive-monitor'); ?></th>
+            <td>
+                <label><input type="checkbox" name="wcm_enable_health_monitoring" value="1" <?php checked($enable, '1'); ?>> <?php _e('Enable health monitoring', 'woo-comprehensive-monitor'); ?></label>
+                <p class="description"><?php _e('Run periodic health checks on WooCommerce, Stripe, server resources, and more.', 'woo-comprehensive-monitor'); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><label for="wcm_health_check_interval"><?php _e('Check Interval (seconds)', 'woo-comprehensive-monitor'); ?></label></th>
+            <td>
+                <input type="number" id="wcm_health_check_interval" name="wcm_health_check_interval" value="<?php echo esc_attr($interval); ?>" min="300" step="300" class="small-text">
+                <p class="description"><?php _e('How often to run health checks. Default: 3600 (1 hour). Minimum: 300 (5 min).', 'woo-comprehensive-monitor'); ?></p>
+            </td>
+        </tr>
+    </table>
+    <?php
+}
+
+/**
+ * Render recovery settings (from Wp-Refund)
+ */
+function wcm_render_recovery_settings() {
+    $enabled = get_option('wcm_recovery_enabled', 'yes');
+    $min_orders = get_option('wcm_recovery_minimum_orders', 2);
+    $grace = get_option('wcm_recovery_grace_period', 0);
+    $method = get_option('wcm_recovery_charge_method', 'manual');
+    $notify_customer = get_option('wcm_recovery_notify_customer', 'yes');
+    $notify_admin = get_option('wcm_recovery_notify_admin', 'yes');
+    $exempt_roles = (array) get_option('wcm_recovery_exempt_roles', array());
+    $ack_text = get_option('wcm_acknowledgment_text', '');
+    ?>
+    <h2><?php _e('Subscription Discount Recovery', 'woo-comprehensive-monitor'); ?></h2>
+    <p class="description"><?php _e('When customers cancel subscriptions early, recover the discount difference between regular and subscription pricing.', 'woo-comprehensive-monitor'); ?></p>
+
+    <table class="form-table">
+        <tr>
+            <th scope="row"><?php _e('Enable Recovery', 'woo-comprehensive-monitor'); ?></th>
+            <td>
+                <select name="wcm_recovery_enabled">
+                    <option value="yes" <?php selected($enabled, 'yes'); ?>><?php _e('Enabled', 'woo-comprehensive-monitor'); ?></option>
+                    <option value="no" <?php selected($enabled, 'no'); ?>><?php _e('Disabled', 'woo-comprehensive-monitor'); ?></option>
+                </select>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><label for="wcm_recovery_minimum_orders"><?php _e('Minimum Orders', 'woo-comprehensive-monitor'); ?></label></th>
+            <td>
+                <input type="number" id="wcm_recovery_minimum_orders" name="wcm_recovery_minimum_orders" value="<?php echo esc_attr($min_orders); ?>" min="1" class="small-text">
+                <p class="description"><?php _e('Number of completed orders before a customer can cancel without a recovery charge. Default: 2.', 'woo-comprehensive-monitor'); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><label for="wcm_recovery_grace_period"><?php _e('Grace Period (days)', 'woo-comprehensive-monitor'); ?></label></th>
+            <td>
+                <input type="number" id="wcm_recovery_grace_period" name="wcm_recovery_grace_period" value="<?php echo esc_attr($grace); ?>" min="0" class="small-text">
+                <p class="description"><?php _e('Days after subscription start where cancellation is free. 0 = no grace period.', 'woo-comprehensive-monitor'); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><?php _e('Charge Method', 'woo-comprehensive-monitor'); ?></th>
+            <td>
+                <select name="wcm_recovery_charge_method">
+                    <option value="manual" <?php selected($method, 'manual'); ?>><?php _e('Manual — Create pending order', 'woo-comprehensive-monitor'); ?></option>
+                    <option value="automatic" <?php selected($method, 'automatic'); ?>><?php _e('Automatic — Charge saved payment method', 'woo-comprehensive-monitor'); ?></option>
+                </select>
+                <p class="description"><?php _e('Manual creates a pending order for admin review. Automatic charges the saved Stripe card immediately.', 'woo-comprehensive-monitor'); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><?php _e('Notifications', 'woo-comprehensive-monitor'); ?></th>
+            <td>
+                <label><input type="checkbox" name="wcm_recovery_notify_customer" value="yes" <?php checked($notify_customer, 'yes'); ?>> <?php _e('Notify customer', 'woo-comprehensive-monitor'); ?></label><br>
+                <label><input type="checkbox" name="wcm_recovery_notify_admin" value="yes" <?php checked($notify_admin, 'yes'); ?>> <?php _e('Notify admin', 'woo-comprehensive-monitor'); ?></label>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><?php _e('Exempt Roles', 'woo-comprehensive-monitor'); ?></th>
+            <td>
+                <?php
+                $roles = wp_roles()->roles;
+                foreach ($roles as $slug => $role) {
+                    printf(
+                        '<label><input type="checkbox" name="wcm_recovery_exempt_roles[]" value="%s" %s> %s</label><br>',
+                        esc_attr($slug),
+                        checked(in_array($slug, $exempt_roles, true), true, false),
+                        esc_html($role['name'])
+                    );
+                }
+                ?>
+                <p class="description"><?php _e('Users with these roles will not be charged recovery fees.', 'woo-comprehensive-monitor'); ?></p>
+            </td>
+        </tr>
+    </table>
+
+    <h2><?php _e('Checkout Acknowledgment', 'woo-comprehensive-monitor'); ?></h2>
+    <table class="form-table">
+        <tr>
+            <th scope="row"><label for="wcm_acknowledgment_text"><?php _e('Acknowledgment Text', 'woo-comprehensive-monitor'); ?></label></th>
+            <td>
+                <textarea id="wcm_acknowledgment_text" name="wcm_acknowledgment_text" rows="3" class="large-text"><?php echo esc_textarea($ack_text); ?></textarea>
+                <p class="description"><?php _e('Text shown as a required checkbox on checkout for subscription products. The customer must agree before purchasing.', 'woo-comprehensive-monitor'); ?></p>
+            </td>
+        </tr>
+    </table>
+    <?php
+}
+
+/**
+ * Render pre-order settings
+ */
+function wcm_render_preorder_settings() {
+    ?>
+    <h2><?php _e('Pre-Order System', 'woo-comprehensive-monitor'); ?></h2>
+    <p class="description"><?php _e('Pre-orders are automatically enabled for any product with backorders allowed. No additional configuration needed.', 'woo-comprehensive-monitor'); ?></p>
+
+    <table class="form-table">
+        <tr>
+            <th scope="row"><?php _e('How It Works', 'woo-comprehensive-monitor'); ?></th>
+            <td>
+                <ol style="margin:0;padding-left:20px;">
+                    <li><?php _e('Go to any product → Inventory tab → set "Allow backorders?" to "Allow" or "Allow, but notify customer"', 'woo-comprehensive-monitor'); ?></li>
+                    <li><?php _e('Set optional availability date, button text, and message in the Pre-Order Settings section', 'woo-comprehensive-monitor'); ?></li>
+                    <li><?php _e('Customers see "Pre-Order Now" button and a notice that their card will only be charged on shipment', 'woo-comprehensive-monitor'); ?></li>
+                    <li><?php _e('At checkout, Stripe saves the card via SetupIntent (no charge)', 'woo-comprehensive-monitor'); ?></li>
+                    <li><?php _e('When you change the order to "Completed", the saved card is charged automatically', 'woo-comprehensive-monitor'); ?></li>
+                </ol>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><?php _e('Custom Order Statuses', 'woo-comprehensive-monitor'); ?></th>
+            <td>
+                <ul style="margin:0;padding-left:20px;">
+                    <li><strong>Pre-Ordered</strong> — <?php _e('Card saved, awaiting shipment', 'woo-comprehensive-monitor'); ?></li>
+                    <li><strong>Pre-Order Payment Failed</strong> — <?php _e('Charge failed (card expired, insufficient funds, etc.)', 'woo-comprehensive-monitor'); ?></li>
+                </ul>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><?php _e('Retry Logic', 'woo-comprehensive-monitor'); ?></th>
+            <td>
+                <p><?php _e('If a charge fails, it automatically retries once after 24 hours. After the second failure, the order is marked as "Pre-Order Payment Failed" for manual handling.', 'woo-comprehensive-monitor'); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><?php _e('Mixed Cart Prevention', 'woo-comprehensive-monitor'); ?></th>
+            <td>
+                <p><?php _e('Customers cannot mix pre-order and in-stock items in the same cart. They must checkout separately.', 'woo-comprehensive-monitor'); ?></p>
+            </td>
+        </tr>
+    </table>
+    <?php
+}
+
+/**
+ * Render alerts settings
+ */
+function wcm_render_alerts_settings() {
+    $send_email = get_option('wcm_send_email_alerts', '1');
+    $send_slack = get_option('wcm_send_slack_alerts', '0');
+    $slack_webhook = get_option('wcm_slack_webhook', '');
+    $send_discord = get_option('wcm_send_discord_alerts', '0');
+    $discord_webhook = get_option('wcm_discord_webhook', '');
+    ?>
+    <table class="form-table">
+        <tr>
+            <th scope="row"><?php _e('Email Alerts', 'woo-comprehensive-monitor'); ?></th>
+            <td><label><input type="checkbox" name="wcm_send_email_alerts" value="1" <?php checked($send_email, '1'); ?>> <?php _e('Send email alerts for critical issues', 'woo-comprehensive-monitor'); ?></label></td>
+        </tr>
+        <tr>
+            <th scope="row"><?php _e('Slack Alerts', 'woo-comprehensive-monitor'); ?></th>
+            <td>
+                <label><input type="checkbox" name="wcm_send_slack_alerts" value="1" <?php checked($send_slack, '1'); ?>> <?php _e('Send Slack alerts', 'woo-comprehensive-monitor'); ?></label><br>
+                <input type="url" name="wcm_slack_webhook" value="<?php echo esc_attr($slack_webhook); ?>" class="regular-text" placeholder="https://hooks.slack.com/services/...">
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><?php _e('Discord Alerts', 'woo-comprehensive-monitor'); ?></th>
+            <td>
+                <label><input type="checkbox" name="wcm_send_discord_alerts" value="1" <?php checked($send_discord, '1'); ?>> <?php _e('Send Discord alerts', 'woo-comprehensive-monitor'); ?></label><br>
+                <input type="url" name="wcm_discord_webhook" value="<?php echo esc_attr($discord_webhook); ?>" class="regular-text" placeholder="https://discord.com/api/webhooks/...">
+            </td>
+        </tr>
+    </table>
+    <?php
+}
+
+/**
+ * Render advanced settings
+ */
+function wcm_render_advanced_settings() {
+    $retention = get_option('wcm_log_retention_days', 30);
+    $debug = get_option('wcm_debug_mode', '0');
+    $store_id = get_option('wcm_store_id', '');
+    ?>
+    <table class="form-table">
+        <tr>
+            <th scope="row"><label for="wcm_log_retention_days"><?php _e('Log Retention (days)', 'woo-comprehensive-monitor'); ?></label></th>
+            <td>
+                <input type="number" id="wcm_log_retention_days" name="wcm_log_retention_days" value="<?php echo esc_attr($retention); ?>" min="1" max="365" class="small-text">
+                <p class="description"><?php _e('Number of days to keep error and health logs.', 'woo-comprehensive-monitor'); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><?php _e('Debug Mode', 'woo-comprehensive-monitor'); ?></th>
+            <td><label><input type="checkbox" name="wcm_debug_mode" value="1" <?php checked($debug, '1'); ?>> <?php _e('Enable debug logging (WooCommerce → Status → Logs)', 'woo-comprehensive-monitor'); ?></label></td>
+        </tr>
+        <tr>
+            <th scope="row"><?php _e('Store ID', 'woo-comprehensive-monitor'); ?></th>
+            <td><code><?php echo esc_html($store_id); ?></code><p class="description"><?php _e('Auto-generated unique identifier for this store.', 'woo-comprehensive-monitor'); ?></p></td>
+        </tr>
+        <tr>
+            <th scope="row"><?php _e('Plugin Version', 'woo-comprehensive-monitor'); ?></th>
+            <td><code><?php echo esc_html(WCM_VERSION); ?></code></td>
+        </tr>
+    </table>
+    <?php
+}

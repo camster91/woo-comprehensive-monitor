@@ -20,10 +20,17 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('WCM_VERSION', '3.1.0');
+define('WCM_VERSION', '4.0.0');
 define('WCM_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WCM_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('WCM_PLUGIN_BASENAME', plugin_basename(__FILE__));
+
+// Declare HPOS compatibility
+add_action( 'before_woocommerce_init', function () {
+    if ( class_exists( \Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
+        \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'custom_order_tables', __FILE__, true );
+    }
+} );
 
 // Include required files
 require_once WCM_PLUGIN_DIR . 'includes/class-wcm-helpers.php';
@@ -34,6 +41,8 @@ require_once WCM_PLUGIN_DIR . 'includes/class-wcm-admin-dashboard.php';
 require_once WCM_PLUGIN_DIR . 'includes/class-wcm-subscription-manager-wps.php';
 require_once WCM_PLUGIN_DIR . 'includes/class-wcm-checkout.php';
 require_once WCM_PLUGIN_DIR . 'includes/class-wcm-evidence-generator.php';
+require_once WCM_PLUGIN_DIR . 'includes/class-wcm-refund-recovery.php';
+require_once WCM_PLUGIN_DIR . 'includes/class-wcm-preorder.php';
 
 /**
  * Main plugin class
@@ -47,6 +56,8 @@ class WooComprehensiveMonitor {
     private $admin_dashboard;
     private $subscription_manager;
     private $checkout;
+    private $refund_recovery;
+    private $preorder;
 
     /**
      * Get singleton instance
@@ -114,6 +125,8 @@ class WooComprehensiveMonitor {
         $this->admin_dashboard = new WCM_Admin_Dashboard();
         $this->subscription_manager = new WCM_Subscription_Manager_WPS();
         $this->checkout = WCM_Checkout::get_instance();
+        $this->refund_recovery = WCM_Refund_Recovery::get_instance();
+        $this->preorder = WCM_PreOrder::get_instance();
     }
 
     /**
@@ -184,6 +197,27 @@ class WooComprehensiveMonitor {
             KEY created_at (created_at)
         ) $charset_collate;";
         
+        // Recovery log table (from Wp-Refund)
+        $recovery_table = $wpdb->prefix . 'wcm_recovery_log';
+        $sql .= "CREATE TABLE IF NOT EXISTS $recovery_table (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            subscription_id bigint(20) unsigned NOT NULL,
+            order_id bigint(20) unsigned DEFAULT NULL,
+            recovery_order_id bigint(20) unsigned DEFAULT NULL,
+            customer_id bigint(20) unsigned NOT NULL,
+            discount_amount decimal(10,2) NOT NULL DEFAULT 0.00,
+            regular_total decimal(10,2) NOT NULL DEFAULT 0.00,
+            subscription_total decimal(10,2) NOT NULL DEFAULT 0.00,
+            charge_status varchar(20) NOT NULL DEFAULT 'pending',
+            charge_date datetime DEFAULT NULL,
+            created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            notes text DEFAULT NULL,
+            PRIMARY KEY (id),
+            KEY subscription_id (subscription_id),
+            KEY customer_id (customer_id),
+            KEY charge_status (charge_status)
+        ) $charset_collate;";
+
         // Subscription acknowledgments table
         $ack_table = $wpdb->prefix . 'woo_subscription_acknowledgments';
         $sql .= "CREATE TABLE IF NOT EXISTS $ack_table (
@@ -262,6 +296,14 @@ class WooComprehensiveMonitor {
             'wcm_store_id' => $this->generate_store_id(),
             'wcm_acknowledgment_text' => 'I acknowledge that I will be charged recurring payments for future subscription renewals. I understand that these charges will continue until I cancel my subscription.',
             'wcm_force_all_products' => '0',
+            // Recovery settings (from Wp-Refund)
+            'wcm_recovery_enabled' => 'yes',
+            'wcm_recovery_minimum_orders' => '2',
+            'wcm_recovery_grace_period' => '0',
+            'wcm_recovery_charge_method' => 'manual',
+            'wcm_recovery_notify_customer' => 'yes',
+            'wcm_recovery_notify_admin' => 'yes',
+            'wcm_recovery_exempt_roles' => array(),
             'wcm_auto_connected' => '1',
             'wcm_connection_time' => current_time('mysql'),
             'wcm_plugin_version' => WCM_VERSION,

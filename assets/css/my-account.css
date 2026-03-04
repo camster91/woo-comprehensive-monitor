@@ -1,0 +1,20 @@
+/* My Account — Recovery Charges */
+
+.woocommerce-MyAccount-navigation ul li.woocommerce-MyAccount-navigation-link--recovery-charges a::before {
+    content: "💰";
+    margin-right: 4px;
+}
+
+.wcm-recovery-notice {
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-left: 4px solid #ffc107;
+    padding: 15px;
+    margin: 15px 0;
+    border-radius: 4px;
+}
+
+.wcm-recovery-notice strong {
+    display: block;
+    margin-bottom: 5px;
+}

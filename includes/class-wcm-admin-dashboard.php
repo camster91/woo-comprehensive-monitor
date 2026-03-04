@@ -42,6 +42,8 @@ class WCM_Admin_Dashboard {
         add_submenu_page( 'woo-comprehensive-monitor', __( 'Error Logs', 'woo-comprehensive-monitor' ), __( 'Error Logs', 'woo-comprehensive-monitor' ), 'manage_woocommerce', 'wcm-error-logs', array( $this, 'render_error_logs_page' ) );
         add_submenu_page( 'woo-comprehensive-monitor', __( 'Disputes', 'woo-comprehensive-monitor' ), __( 'Disputes', 'woo-comprehensive-monitor' ), 'manage_woocommerce', 'wcm-disputes', array( $this, 'render_disputes_page' ) );
         add_submenu_page( 'woo-comprehensive-monitor', __( 'Acknowledgments', 'woo-comprehensive-monitor' ), __( 'Acknowledgments', 'woo-comprehensive-monitor' ), 'manage_woocommerce', 'wcm-acknowledgments', array( $this, 'render_acknowledgments_page' ) );
+        add_submenu_page( 'woo-comprehensive-monitor', __( 'Recovery Log', 'woo-comprehensive-monitor' ), __( 'Recovery Log', 'woo-comprehensive-monitor' ), 'manage_woocommerce', 'wcm-recovery', array( $this, 'render_recovery_page' ) );
+        add_submenu_page( 'woo-comprehensive-monitor', __( 'Pre-Orders', 'woo-comprehensive-monitor' ), __( 'Pre-Orders', 'woo-comprehensive-monitor' ), 'manage_woocommerce', 'wcm-preorders', array( $this, 'render_preorders_page' ) );
         add_submenu_page( 'woo-comprehensive-monitor', __( 'Health Checks', 'woo-comprehensive-monitor' ), __( 'Health Checks', 'woo-comprehensive-monitor' ), 'manage_woocommerce', 'wcm-health', array( $this, 'render_health_page' ) );
         add_submenu_page( 'woo-comprehensive-monitor', __( 'Settings', 'woo-comprehensive-monitor' ), __( 'Settings', 'woo-comprehensive-monitor' ), 'manage_woocommerce', 'woo-comprehensive-monitor-settings', 'wcm_render_settings_page' );
     }
@@ -73,6 +75,12 @@ class WCM_Admin_Dashboard {
         $dispute_count = $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}wcm_dispute_evidence" );
         $ack_table     = $wpdb->prefix . 'woo_subscription_acknowledgments';
         $ack_count     = $wpdb->get_var( $wpdb->prepare( "SHOW TABLES LIKE %s", $ack_table ) ) ? $wpdb->get_var( "SELECT COUNT(*) FROM {$ack_table}" ) : 0;
+
+        // Recovery stats
+        $recovery = WCM_Refund_Recovery::get_instance()->get_recovery_stats();
+
+        // Pre-order stats
+        $preorder = WCM_PreOrder::get_instance()->get_preorder_stats();
         ?>
         <div class="wrap wcm-admin">
             <h1><?php esc_html_e( 'WooCommerce Monitor Dashboard', 'woo-comprehensive-monitor' ); ?></h1>
@@ -95,6 +103,14 @@ class WCM_Admin_Dashboard {
                 <div class="wcm-stat-card">
                     <h3><?php esc_html_e( 'Acknowledgments', 'woo-comprehensive-monitor' ); ?></h3>
                     <p class="wcm-stat-number"><?php echo esc_html( $ack_count ); ?></p>
+                </div>
+                <div class="wcm-stat-card">
+                    <h3><?php esc_html_e( 'Recovered', 'woo-comprehensive-monitor' ); ?></h3>
+                    <p class="wcm-stat-number" style="font-size:24px;"><?php echo wc_price( $recovery['total_recovered'] ); ?></p>
+                </div>
+                <div class="wcm-stat-card">
+                    <h3><?php esc_html_e( 'Pre-Orders', 'woo-comprehensive-monitor' ); ?></h3>
+                    <p class="wcm-stat-number"><?php echo esc_html( $preorder['pre_ordered'] ); ?></p>
                 </div>
             </div>
 
@@ -356,6 +372,168 @@ class WCM_Admin_Dashboard {
             </table>
             <?php else : ?>
             <p><?php esc_html_e( 'No health checks run yet.', 'woo-comprehensive-monitor' ); ?></p>
+            <?php endif; ?>
+        </div>
+        <?php
+    }
+
+    // ==========================================
+    // RECOVERY LOG PAGE
+    // ==========================================
+    public function render_recovery_page() {
+        $recovery = WCM_Refund_Recovery::get_instance();
+        $stats    = $recovery->get_recovery_stats();
+        $page     = isset( $_GET['paged'] ) ? max( 1, absint( $_GET['paged'] ) ) : 1;
+        $logs     = $recovery->get_recovery_log( 25, $page );
+        ?>
+        <div class="wrap wcm-admin">
+            <h1><?php esc_html_e( 'Subscription Discount Recovery', 'woo-comprehensive-monitor' ); ?></h1>
+
+            <div class="wcm-dashboard-stats">
+                <div class="wcm-stat-card"><h3><?php esc_html_e( 'Total Charges', 'woo-comprehensive-monitor' ); ?></h3><p class="wcm-stat-number"><?php echo esc_html( $stats['total'] ); ?></p></div>
+                <div class="wcm-stat-card"><h3><?php esc_html_e( 'Charged', 'woo-comprehensive-monitor' ); ?></h3><p class="wcm-stat-number" style="color:#4CAF50;"><?php echo esc_html( $stats['charged'] ); ?></p></div>
+                <div class="wcm-stat-card"><h3><?php esc_html_e( 'Pending', 'woo-comprehensive-monitor' ); ?></h3><p class="wcm-stat-number" style="color:#FF9800;"><?php echo esc_html( $stats['pending'] ); ?></p></div>
+                <div class="wcm-stat-card"><h3><?php esc_html_e( 'Failed', 'woo-comprehensive-monitor' ); ?></h3><p class="wcm-stat-number" style="color:#F44336;"><?php echo esc_html( $stats['failed'] ); ?></p></div>
+                <div class="wcm-stat-card"><h3><?php esc_html_e( 'Total Recovered', 'woo-comprehensive-monitor' ); ?></h3><p class="wcm-stat-number" style="color:#4CAF50;font-size:24px;"><?php echo wc_price( $stats['total_recovered'] ); ?></p></div>
+            </div>
+
+            <div class="wcm-info-box">
+                <h3><?php esc_html_e( 'How It Works', 'woo-comprehensive-monitor' ); ?></h3>
+                <p><?php printf( esc_html__( 'When a customer cancels a subscription before completing %d orders, the discount difference between the regular price and what they paid is automatically charged. Configure in Settings.', 'woo-comprehensive-monitor' ), WCM_Refund_Recovery::get_minimum_orders() ); ?></p>
+                <p><strong><?php esc_html_e( 'Grace Period:', 'woo-comprehensive-monitor' ); ?></strong> <?php echo esc_html( WCM_Refund_Recovery::get_grace_period_days() ); ?> <?php esc_html_e( 'days', 'woo-comprehensive-monitor' ); ?> |
+                <strong><?php esc_html_e( 'Charge Method:', 'woo-comprehensive-monitor' ); ?></strong> <?php echo esc_html( ucfirst( WCM_Refund_Recovery::get_charge_method() ) ); ?></p>
+            </div>
+
+            <?php if ( ! empty( $logs ) ) : ?>
+            <table class="wp-list-table widefat fixed striped">
+                <thead>
+                    <tr>
+                        <th><?php esc_html_e( 'Date', 'woo-comprehensive-monitor' ); ?></th>
+                        <th><?php esc_html_e( 'Subscription', 'woo-comprehensive-monitor' ); ?></th>
+                        <th><?php esc_html_e( 'Customer', 'woo-comprehensive-monitor' ); ?></th>
+                        <th><?php esc_html_e( 'Regular Total', 'woo-comprehensive-monitor' ); ?></th>
+                        <th><?php esc_html_e( 'Paid', 'woo-comprehensive-monitor' ); ?></th>
+                        <th><?php esc_html_e( 'Recovery', 'woo-comprehensive-monitor' ); ?></th>
+                        <th><?php esc_html_e( 'Status', 'woo-comprehensive-monitor' ); ?></th>
+                        <th><?php esc_html_e( 'Order', 'woo-comprehensive-monitor' ); ?></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ( $logs as $log ) :
+                        $customer = get_userdata( $log->customer_id );
+                    ?>
+                    <tr>
+                        <td><?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $log->created_at ) ) ); ?></td>
+                        <td>#<?php echo esc_html( $log->subscription_id ); ?></td>
+                        <td><?php echo $customer ? esc_html( $customer->display_name ) : '#' . esc_html( $log->customer_id ); ?></td>
+                        <td><?php echo wc_price( $log->regular_total ); ?></td>
+                        <td><?php echo wc_price( $log->subscription_total ); ?></td>
+                        <td><strong><?php echo wc_price( $log->discount_amount ); ?></strong></td>
+                        <td>
+                            <?php
+                            $colors = array( 'charged' => '#4CAF50', 'pending' => '#FF9800', 'failed' => '#F44336' );
+                            $color  = $colors[ $log->charge_status ] ?? '#666';
+                            printf( '<span style="color:%s;font-weight:bold;">%s</span>', esc_attr( $color ), esc_html( ucfirst( $log->charge_status ) ) );
+                            ?>
+                        </td>
+                        <td>
+                            <?php if ( $log->recovery_order_id ) : ?>
+                                <a href="<?php echo esc_url( admin_url( 'post.php?post=' . $log->recovery_order_id . '&action=edit' ) ); ?>">#<?php echo esc_html( $log->recovery_order_id ); ?></a>
+                            <?php else : ?>—<?php endif; ?>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+            <?php else : ?>
+            <p><?php esc_html_e( 'No recovery charges yet. When customers cancel subscriptions early, recovery charges will appear here.', 'woo-comprehensive-monitor' ); ?></p>
+            <?php endif; ?>
+        </div>
+        <?php
+    }
+
+    // ==========================================
+    // PRE-ORDERS PAGE
+    // ==========================================
+    public function render_preorders_page() {
+        $preorder = WCM_PreOrder::get_instance();
+        $stats    = $preorder->get_preorder_stats();
+
+        // Get pre-ordered orders
+        $args = array(
+            'status' => array( 'pre-ordered', 'pre-order-fail' ),
+            'limit'  => 50,
+            'orderby' => 'date',
+            'order'   => 'DESC',
+        );
+        $orders = wc_get_orders( $args );
+        ?>
+        <div class="wrap wcm-admin">
+            <h1><?php esc_html_e( 'Pre-Orders', 'woo-comprehensive-monitor' ); ?></h1>
+
+            <div class="wcm-dashboard-stats">
+                <div class="wcm-stat-card"><h3><?php esc_html_e( 'Awaiting Shipment', 'woo-comprehensive-monitor' ); ?></h3><p class="wcm-stat-number" style="color:#2271b1;"><?php echo esc_html( $stats['pre_ordered'] ); ?></p></div>
+                <div class="wcm-stat-card"><h3><?php esc_html_e( 'Charged', 'woo-comprehensive-monitor' ); ?></h3><p class="wcm-stat-number" style="color:#4CAF50;"><?php echo esc_html( $stats['charged'] ); ?></p></div>
+                <div class="wcm-stat-card"><h3><?php esc_html_e( 'Payment Failed', 'woo-comprehensive-monitor' ); ?></h3><p class="wcm-stat-number" style="color:#F44336;"><?php echo esc_html( $stats['failed'] ); ?></p></div>
+            </div>
+
+            <div class="wcm-info-box">
+                <h3><?php esc_html_e( 'How Pre-Orders Work', 'woo-comprehensive-monitor' ); ?></h3>
+                <p><?php esc_html_e( 'Products set to "Allow Backorders" automatically become pre-order products. At checkout, the customer\'s card is saved (not charged). When you change the order status to "Completed" (ship it), the card is charged automatically.', 'woo-comprehensive-monitor' ); ?></p>
+                <ul style="list-style:disc;padding-left:20px;">
+                    <li><?php esc_html_e( 'Product → Inventory → Allow Backorders = "Allow" or "Notify" → becomes a pre-order', 'woo-comprehensive-monitor' ); ?></li>
+                    <li><?php esc_html_e( 'Set optional availability date, button text, and message in product editor', 'woo-comprehensive-monitor' ); ?></li>
+                    <li><?php esc_html_e( 'Mixed carts (pre-order + in-stock) are blocked automatically', 'woo-comprehensive-monitor' ); ?></li>
+                    <li><?php esc_html_e( 'Failed charges retry automatically after 24 hours', 'woo-comprehensive-monitor' ); ?></li>
+                </ul>
+            </div>
+
+            <?php if ( ! empty( $orders ) ) : ?>
+            <table class="wp-list-table widefat fixed striped">
+                <thead>
+                    <tr>
+                        <th><?php esc_html_e( 'Order', 'woo-comprehensive-monitor' ); ?></th>
+                        <th><?php esc_html_e( 'Customer', 'woo-comprehensive-monitor' ); ?></th>
+                        <th><?php esc_html_e( 'Items', 'woo-comprehensive-monitor' ); ?></th>
+                        <th><?php esc_html_e( 'Total', 'woo-comprehensive-monitor' ); ?></th>
+                        <th><?php esc_html_e( 'Charge Status', 'woo-comprehensive-monitor' ); ?></th>
+                        <th><?php esc_html_e( 'Date', 'woo-comprehensive-monitor' ); ?></th>
+                        <th><?php esc_html_e( 'Actions', 'woo-comprehensive-monitor' ); ?></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ( $orders as $order ) :
+                        $charge_status = $order->get_meta( '_preorder_charge_status' );
+                        $items = array();
+                        foreach ( $order->get_items() as $item ) {
+                            $items[] = $item->get_name() . ' × ' . $item->get_quantity();
+                        }
+                    ?>
+                    <tr>
+                        <td><a href="<?php echo esc_url( $order->get_edit_order_url() ); ?>">#<?php echo esc_html( $order->get_order_number() ); ?></a></td>
+                        <td><?php echo esc_html( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() ); ?></td>
+                        <td><?php echo esc_html( implode( ', ', $items ) ); ?></td>
+                        <td><?php echo $order->get_formatted_order_total(); ?></td>
+                        <td>
+                            <?php
+                            $cs_colors = array( 'pending' => '#FF9800', 'charged' => '#4CAF50', 'failed' => '#F44336', 'retry' => '#2196F3' );
+                            $cs_color  = $cs_colors[ $charge_status ] ?? '#666';
+                            printf( '<span style="color:%s;font-weight:bold;">%s</span>', esc_attr( $cs_color ), esc_html( ucfirst( $charge_status ?: $order->get_status() ) ) );
+                            ?>
+                        </td>
+                        <td><?php echo esc_html( $order->get_date_created() ? $order->get_date_created()->date_i18n( get_option( 'date_format' ) ) : '' ); ?></td>
+                        <td>
+                            <?php if ( $order->has_status( 'pre-ordered' ) ) : ?>
+                                <a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-ajax.php?action=woocommerce_mark_order_status&status=completed&order_id=' . $order->get_id() ), 'woocommerce-mark-order-status' ) ); ?>" class="button button-small button-primary"><?php esc_html_e( 'Ship & Charge', 'woo-comprehensive-monitor' ); ?></a>
+                            <?php endif; ?>
+                            <a href="<?php echo esc_url( $order->get_edit_order_url() ); ?>" class="button button-small"><?php esc_html_e( 'View', 'woo-comprehensive-monitor' ); ?></a>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+            <?php else : ?>
+            <p><?php esc_html_e( 'No pre-orders found. Set a product\'s backorder setting to "Allow" or "Notify" to enable pre-orders.', 'woo-comprehensive-monitor' ); ?></p>
             <?php endif; ?>
         </div>
         <?php
