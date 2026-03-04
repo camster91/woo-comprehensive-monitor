@@ -20,17 +20,20 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('WCM_VERSION', '3.0.0');
+define('WCM_VERSION', '3.1.0');
 define('WCM_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WCM_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('WCM_PLUGIN_BASENAME', plugin_basename(__FILE__));
 
 // Include required files
+require_once WCM_PLUGIN_DIR . 'includes/class-wcm-helpers.php';
 require_once WCM_PLUGIN_DIR . 'includes/class-wcm-dispute-manager.php';
 require_once WCM_PLUGIN_DIR . 'includes/class-wcm-error-tracker.php';
 require_once WCM_PLUGIN_DIR . 'includes/class-wcm-health-monitor.php';
 require_once WCM_PLUGIN_DIR . 'includes/class-wcm-admin-dashboard.php';
 require_once WCM_PLUGIN_DIR . 'includes/class-wcm-subscription-manager-wps.php';
+require_once WCM_PLUGIN_DIR . 'includes/class-wcm-checkout.php';
+require_once WCM_PLUGIN_DIR . 'includes/class-wcm-evidence-generator.php';
 
 /**
  * Main plugin class
@@ -43,6 +46,7 @@ class WooComprehensiveMonitor {
     private $health_monitor;
     private $admin_dashboard;
     private $subscription_manager;
+    private $checkout;
 
     /**
      * Get singleton instance
@@ -103,11 +107,13 @@ class WooComprehensiveMonitor {
         }
 
         // Initialize components
+        WCM_Helpers::get_instance();
         $this->dispute_manager = new WCM_Dispute_Manager();
         $this->error_tracker = new WCM_Error_Tracker();
         $this->health_monitor = new WCM_Health_Monitor();
         $this->admin_dashboard = new WCM_Admin_Dashboard();
         $this->subscription_manager = new WCM_Subscription_Manager_WPS();
+        $this->checkout = WCM_Checkout::get_instance();
     }
 
     /**
@@ -178,6 +184,45 @@ class WooComprehensiveMonitor {
             KEY created_at (created_at)
         ) $charset_collate;";
         
+        // Subscription acknowledgments table
+        $ack_table = $wpdb->prefix . 'woo_subscription_acknowledgments';
+        $sql .= "CREATE TABLE IF NOT EXISTS $ack_table (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            user_id bigint(20) NOT NULL DEFAULT 0,
+            order_id bigint(20) NOT NULL,
+            acknowledgment_text text,
+            ip_address varchar(45),
+            user_agent text,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY user_id (user_id),
+            KEY order_id (order_id),
+            KEY created_at (created_at)
+        ) $charset_collate;";
+
+        // Dispute evidence table (enhanced with file paths)
+        $evidence_table = $wpdb->prefix . 'wcm_dispute_evidence';
+        $sql .= "CREATE TABLE IF NOT EXISTS $evidence_table (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            dispute_id varchar(100) NOT NULL,
+            order_id bigint(20) NOT NULL,
+            customer_email varchar(255) NOT NULL,
+            stripe_dispute_id varchar(100),
+            evidence_file_path varchar(500),
+            evidence_file_url varchar(500),
+            evidence_type varchar(50) NOT NULL DEFAULT 'auto_generated',
+            evidence_data longtext,
+            status varchar(50) DEFAULT 'pending',
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY stripe_dispute_id (stripe_dispute_id),
+            KEY dispute_id (dispute_id),
+            KEY order_id (order_id),
+            KEY status (status),
+            KEY customer_email (customer_email)
+        ) $charset_collate;";
+
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
         dbDelta($sql);
         
@@ -215,6 +260,8 @@ class WooComprehensiveMonitor {
             'wcm_enable_health_monitoring' => '1',
             'wcm_health_check_interval' => '3600', // 1 hour
             'wcm_store_id' => $this->generate_store_id(),
+            'wcm_acknowledgment_text' => 'I acknowledge that I will be charged recurring payments for future subscription renewals. I understand that these charges will continue until I cancel my subscription.',
+            'wcm_force_all_products' => '0',
             'wcm_auto_connected' => '1',
             'wcm_connection_time' => current_time('mysql'),
             'wcm_plugin_version' => WCM_VERSION,
