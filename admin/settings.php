@@ -27,6 +27,7 @@ function wcm_render_settings_page() {
         'dispute_protection' => __('Dispute Protection', 'woo-comprehensive-monitor'),
         'health_monitoring' => __('Health Monitoring', 'woo-comprehensive-monitor'),
         'recovery' => __('Discount Recovery', 'woo-comprehensive-monitor'),
+        'price_diff' => __('Price Diff Charger', 'woo-comprehensive-monitor'),
         'preorders' => __('Pre-Orders', 'woo-comprehensive-monitor'),
         'alerts' => __('Alerts & Notifications', 'woo-comprehensive-monitor'),
         'advanced' => __('Advanced', 'woo-comprehensive-monitor'),
@@ -65,6 +66,9 @@ function wcm_render_settings_page() {
                         break;
                     case 'recovery':
                         wcm_render_recovery_settings();
+                        break;
+                    case 'price_diff':
+                        wcm_render_price_diff_settings();
                         break;
                     case 'preorders':
                         wcm_render_preorder_settings();
@@ -194,6 +198,14 @@ function wcm_save_settings() {
         update_option('wcm_recovery_exempt_roles', array_map('sanitize_text_field', (array) $_POST['wcm_recovery_exempt_roles']));
     } else {
         update_option('wcm_recovery_exempt_roles', array());
+    }
+
+    // Price diff charger settings
+    if (isset($_POST['wcm_spd_auto_charge_on_cancel'])) {
+        update_option('wcm_spd_auto_charge_on_cancel', sanitize_text_field($_POST['wcm_spd_auto_charge_on_cancel']));
+    }
+    if (isset($_POST['wcm_spd_customer_self_service'])) {
+        update_option('wcm_spd_customer_self_service', sanitize_text_field($_POST['wcm_spd_customer_self_service']));
     }
 
     // Acknowledgment settings
@@ -594,6 +606,73 @@ function wcm_render_recovery_settings() {
             <td>
                 <textarea id="wcm_acknowledgment_text" name="wcm_acknowledgment_text" rows="3" class="large-text"><?php echo esc_textarea($ack_text); ?></textarea>
                 <p class="description"><?php _e('Text shown as a required checkbox on checkout for subscription products. The customer must agree before purchasing.', 'woo-comprehensive-monitor'); ?></p>
+            </td>
+        </tr>
+    </table>
+    <?php
+}
+
+/**
+ * Render price diff charger settings (from subscription-price-diff-charger)
+ */
+function wcm_render_price_diff_settings() {
+    $auto_charge = get_option('wcm_spd_auto_charge_on_cancel', 'no');
+    $self_service = get_option('wcm_spd_customer_self_service', 'yes');
+    $has_wcs = class_exists('WC_Subscriptions');
+    ?>
+    <h2><?php _e('Subscription Price Difference Charger', 'woo-comprehensive-monitor'); ?></h2>
+    <p class="description"><?php _e('When a customer cancels or converts their WooCommerce Subscription, charge the difference between the subscription (discounted) price and the regular (one-time) price.', 'woo-comprehensive-monitor'); ?></p>
+
+    <?php if (!$has_wcs) : ?>
+    <div class="notice notice-warning inline" style="margin:15px 0;"><p><?php _e('⚠️ WooCommerce Subscriptions is not active. Price Difference Charger requires it to function.', 'woo-comprehensive-monitor'); ?></p></div>
+    <?php endif; ?>
+
+    <table class="form-table">
+        <tr>
+            <th scope="row"><?php _e('Auto-Charge on Cancellation', 'woo-comprehensive-monitor'); ?></th>
+            <td>
+                <select name="wcm_spd_auto_charge_on_cancel">
+                    <option value="no" <?php selected($auto_charge, 'no'); ?>><?php _e('No — Manual only (admin clicks "Charge Difference")', 'woo-comprehensive-monitor'); ?></option>
+                    <option value="yes" <?php selected($auto_charge, 'yes'); ?>><?php _e('Yes — Automatically charge when subscription is cancelled', 'woo-comprehensive-monitor'); ?></option>
+                </select>
+                <p class="description"><?php _e('When enabled, the price difference is automatically charged via saved payment method when a subscription status changes to "Cancelled".', 'woo-comprehensive-monitor'); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><?php _e('Customer Self-Service', 'woo-comprehensive-monitor'); ?></th>
+            <td>
+                <select name="wcm_spd_customer_self_service">
+                    <option value="yes" <?php selected($self_service, 'yes'); ?>><?php _e('Yes — Show "Convert to One-Time Purchase" on My Account', 'woo-comprehensive-monitor'); ?></option>
+                    <option value="no" <?php selected($self_service, 'no'); ?>><?php _e('No — Admin-only', 'woo-comprehensive-monitor'); ?></option>
+                </select>
+                <p class="description"><?php _e('When enabled, customers see a "Convert to One-Time Purchase" section on their subscription detail page in My Account. They can pay the difference and convert voluntarily.', 'woo-comprehensive-monitor'); ?></p>
+            </td>
+        </tr>
+    </table>
+
+    <h3><?php _e('How It Works', 'woo-comprehensive-monitor'); ?></h3>
+    <table class="form-table">
+        <tr>
+            <th scope="row"><?php _e('Admin Usage', 'woo-comprehensive-monitor'); ?></th>
+            <td>
+                <ol style="margin:0;padding-left:20px;">
+                    <li><?php _e('Go to any WooCommerce Subscription edit page', 'woo-comprehensive-monitor'); ?></li>
+                    <li><?php _e('Look at the "Price Difference Charger" meta-box on the right', 'woo-comprehensive-monitor'); ?></li>
+                    <li><?php _e('It shows the subscription price vs regular price breakdown', 'woo-comprehensive-monitor'); ?></li>
+                    <li><?php _e('Click "Charge Difference" to create a charge order', 'woo-comprehensive-monitor'); ?></li>
+                </ol>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><?php _e('Subscription List', 'woo-comprehensive-monitor'); ?></th>
+            <td>
+                <p><?php _e('A "Price Diff" column is added to the WooCommerce Subscriptions list table showing the uncharged difference amount or "Charged" status for each subscription.', 'woo-comprehensive-monitor'); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><?php _e('Supported Gateways', 'woo-comprehensive-monitor'); ?></th>
+            <td>
+                <p><?php _e('Payment is processed via the WooCommerce Subscriptions renewal hook, so it works with any compatible gateway: Stripe, PayPal, Square, Authorize.net, etc. If auto-charge fails, a pending order is created for manual payment.', 'woo-comprehensive-monitor'); ?></p>
             </td>
         </tr>
     </table>

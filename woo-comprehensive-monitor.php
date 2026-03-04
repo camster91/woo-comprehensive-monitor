@@ -3,7 +3,7 @@
  * Plugin Name: WooCommerce Comprehensive Monitor & Dispute Protection
  * Plugin URI: https://ashbi.ca
  * Description: Complete WooCommerce monitoring, error tracking, dispute protection, and health alerts. Combines frontend monitoring, dispute evidence generation, and centralized health reporting.
- * Version: 4.0.0
+ * Version: 4.1.0
  * Author: Ashbi
  * Author URI: https://ashbi.ca
  * License: GPL2
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('WCM_VERSION', '4.0.0');
+define('WCM_VERSION', '4.1.0');
 define('WCM_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WCM_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('WCM_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -43,6 +43,7 @@ require_once WCM_PLUGIN_DIR . 'includes/class-wcm-checkout.php';
 require_once WCM_PLUGIN_DIR . 'includes/class-wcm-evidence-generator.php';
 require_once WCM_PLUGIN_DIR . 'includes/class-wcm-refund-recovery.php';
 require_once WCM_PLUGIN_DIR . 'includes/class-wcm-preorder.php';
+require_once WCM_PLUGIN_DIR . 'includes/class-wcm-price-diff-charger.php';
 
 /**
  * Main plugin class
@@ -58,6 +59,7 @@ class WooComprehensiveMonitor {
     private $checkout;
     private $refund_recovery;
     private $preorder;
+    private $price_diff_charger;
 
     /**
      * Get singleton instance
@@ -127,6 +129,7 @@ class WooComprehensiveMonitor {
         $this->checkout = WCM_Checkout::get_instance();
         $this->refund_recovery = WCM_Refund_Recovery::get_instance();
         $this->preorder = WCM_PreOrder::get_instance();
+        $this->price_diff_charger = WCM_Price_Diff_Charger::get_instance();
     }
 
     /**
@@ -287,6 +290,9 @@ class WooComprehensiveMonitor {
             'wcm_recovery_notify_customer' => 'yes',
             'wcm_recovery_notify_admin' => 'yes',
             'wcm_recovery_exempt_roles' => array(),
+            // Price diff charger settings (from subscription-price-diff-charger)
+            'wcm_spd_auto_charge_on_cancel' => 'no',
+            'wcm_spd_customer_self_service' => 'yes',
             'wcm_auto_connected' => '1',
             'wcm_connection_time' => current_time('mysql'),
             'wcm_plugin_version' => WCM_VERSION,

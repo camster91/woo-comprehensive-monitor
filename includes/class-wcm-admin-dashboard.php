@@ -81,6 +81,9 @@ class WCM_Admin_Dashboard {
 
         // Pre-order stats
         $preorder = WCM_PreOrder::get_instance()->get_preorder_stats();
+
+        // Price diff stats
+        $pricediff = WCM_Price_Diff_Charger::get_instance()->get_stats();
         ?>
         <div class="wrap wcm-admin">
             <h1><?php esc_html_e( 'WooCommerce Monitor Dashboard', 'woo-comprehensive-monitor' ); ?></h1>
@@ -111,6 +114,10 @@ class WCM_Admin_Dashboard {
                 <div class="wcm-stat-card">
                     <h3><?php esc_html_e( 'Pre-Orders', 'woo-comprehensive-monitor' ); ?></h3>
                     <p class="wcm-stat-number"><?php echo esc_html( $preorder['pre_ordered'] ); ?></p>
+                </div>
+                <div class="wcm-stat-card">
+                    <h3><?php esc_html_e( 'Price Diffs', 'woo-comprehensive-monitor' ); ?></h3>
+                    <p class="wcm-stat-number"><?php echo esc_html( $pricediff['total'] ); ?></p>
                 </div>
             </div>
 
