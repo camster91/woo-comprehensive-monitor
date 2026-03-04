@@ -405,7 +405,16 @@ app.get("/dashboard", (req, res) => {
 });
 
 // ==========================================
-// 6. DEEP HEALTH WOOCOMMERCE MONITOR
+// 6. PLUGIN DOWNLOAD ENDPOINT
+// ==========================================
+app.get("/download/plugin", (req, res) => {
+  // Redirect to the latest GitHub release
+  // This will always point to the most recent release
+  res.redirect(302, "https://github.com/camster91/woo-comprehensive-monitor/releases/latest");
+});
+
+// ==========================================
+// 7. DEEP HEALTH WOOCOMMERCE MONITOR
 // ==========================================
 async function checkWooCommerceAPI() {
   if (sites.length === 0) {
