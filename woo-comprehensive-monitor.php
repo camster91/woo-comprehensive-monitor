@@ -3,7 +3,7 @@
  * Plugin Name: WooCommerce Comprehensive Monitor & Dispute Protection
  * Plugin URI: https://ashbi.ca
  * Description: Complete WooCommerce monitoring, error tracking, dispute protection, and health alerts. Combines frontend monitoring, dispute evidence generation, and centralized health reporting.
- * Version: 4.4.0
+ * Version: 4.4.1
  * Author: Ashbi
  * Author URI: https://ashbi.ca
  * License: GPL2
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('WCM_VERSION', '4.4.0');
+define('WCM_VERSION', '4.4.1');
 define('WCM_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WCM_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('WCM_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -112,34 +112,48 @@ class WooComprehensiveMonitor {
      * Initialize plugin components
      */
     public function init_components() {
-        // Check version upgrade
-        $stored_version = get_option( 'wcm_plugin_version', '0' );
-        if ( version_compare( $stored_version, WCM_VERSION, '<' ) ) {
-            $this->upgrade_plugin( $stored_version, WCM_VERSION );
-            update_option( 'wcm_plugin_version', WCM_VERSION );
-        }
-        
-        // Check if WooCommerce is active
-        if (!class_exists('WooCommerce')) {
-            add_action('admin_notices', array($this, 'woocommerce_missing_notice'));
-            return;
-        }
+        try {
+            // Check version upgrade
+            $stored_version = get_option( 'wcm_plugin_version', '0' );
+            if ( version_compare( $stored_version, WCM_VERSION, '<' ) ) {
+                $this->upgrade_plugin( $stored_version, WCM_VERSION );
+                update_option( 'wcm_plugin_version', WCM_VERSION );
+            }
+            
+            // Check if WooCommerce is active
+            if (!class_exists('WooCommerce')) {
+                add_action('admin_notices', array($this, 'woocommerce_missing_notice'));
+                return;
+            }
 
-        // Check if Stripe is active
-        if (!class_exists('WC_Stripe')) {
-            add_action('admin_notices', array($this, 'stripe_missing_notice'));
-        }
+            // Check if Stripe is active
+            if (!class_exists('WC_Stripe')) {
+                add_action('admin_notices', array($this, 'stripe_missing_notice'));
+            }
 
-        // Initialize components
-        WCM_Helpers::get_instance();
-        $this->dispute_manager = new WCM_Dispute_Manager();
-        $this->error_tracker = new WCM_Error_Tracker();
-        $this->health_monitor = new WCM_Health_Monitor();
-        $this->admin_dashboard = new WCM_Admin_Dashboard();
-        $this->subscription_manager = new WCM_Subscription_Manager_WPS();
-        $this->checkout = WCM_Checkout::get_instance();
-        $this->subscription_protector = WCM_Subscription_Protector::get_instance();
-        $this->preorder = WCM_PreOrder::get_instance();
+            // Initialize components with error handling
+            WCM_Helpers::get_instance();
+            $this->dispute_manager = new WCM_Dispute_Manager();
+            $this->error_tracker = new WCM_Error_Tracker();
+            $this->health_monitor = new WCM_Health_Monitor();
+            $this->admin_dashboard = new WCM_Admin_Dashboard();
+            $this->subscription_manager = new WCM_Subscription_Manager_WPS();
+            $this->checkout = WCM_Checkout::get_instance();
+            $this->subscription_protector = WCM_Subscription_Protector::get_instance();
+            $this->preorder = WCM_PreOrder::get_instance();
+            
+        } catch (Exception $e) {
+            // Log error but don't crash
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('[WCM] Error in init_components: ' . $e->getMessage());
+            }
+            // Show admin notice
+            add_action('admin_notices', function() use ($e) {
+                echo '<div class="notice notice-error"><p>';
+                echo '<strong>WooCommerce Comprehensive Monitor Error:</strong> ' . esc_html($e->getMessage());
+                echo '</p></div>';
+            });
+        }
     }
 
     /**
@@ -186,106 +200,137 @@ class WooComprehensiveMonitor {
      * Plugin activation with auto-connect
      */
     public function activate() {
-        // Create database tables
         global $wpdb;
-
-        $charset_collate = $wpdb->get_charset_collate();
-
-        // Error tracking table
-        $table_name = $wpdb->prefix . 'wcm_error_logs';
-        $sql = "CREATE TABLE IF NOT EXISTS $table_name (
-            id bigint(20) NOT NULL AUTO_INCREMENT,
-            error_type varchar(100) NOT NULL,
-            error_message text NOT NULL,
-            page_url varchar(500) NOT NULL,
-            user_agent text,
-            customer_email varchar(255),
-            order_id bigint(20),
-            created_at datetime DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (id),
-            KEY error_type (error_type),
-            KEY created_at (created_at),
-            KEY order_id (order_id)
-        ) $charset_collate;";
-
-        // Health check logs table
-        $table_name = $wpdb->prefix . 'wcm_health_logs';
-        $sql .= "CREATE TABLE IF NOT EXISTS $table_name (
-            id bigint(20) NOT NULL AUTO_INCREMENT,
-            check_type varchar(100) NOT NULL,
-            status varchar(50) NOT NULL,
-            details text NOT NULL,
-            created_at datetime DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (id),
-            KEY check_type (check_type),
-            KEY status (status),
-            KEY created_at (created_at)
-        ) $charset_collate;";
-
-        // Recovery log table (from Wp-Refund)
-        $recovery_table = $wpdb->prefix . 'wcm_recovery_log';
-        $sql .= "CREATE TABLE IF NOT EXISTS $recovery_table (
-            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-            subscription_id bigint(20) unsigned NOT NULL,
-            order_id bigint(20) unsigned DEFAULT NULL,
-            recovery_order_id bigint(20) unsigned DEFAULT NULL,
-            customer_id bigint(20) unsigned NOT NULL,
-            discount_amount decimal(10,2) NOT NULL DEFAULT 0.00,
-            regular_total decimal(10,2) NOT NULL DEFAULT 0.00,
-            subscription_total decimal(10,2) NOT NULL DEFAULT 0.00,
-            charge_status varchar(20) NOT NULL DEFAULT 'pending',
-            charge_type varchar(30) DEFAULT NULL,
-            charge_date datetime DEFAULT NULL,
-            created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            notes text DEFAULT NULL,
-            PRIMARY KEY (id),
-            KEY subscription_id (subscription_id),
-            KEY customer_id (customer_id),
-            KEY charge_status (charge_status)
-        ) $charset_collate;";
-
-        // Subscription acknowledgments table
-        $ack_table = $wpdb->prefix . 'woo_subscription_acknowledgments';
-        $sql .= "CREATE TABLE IF NOT EXISTS $ack_table (
-            id bigint(20) NOT NULL AUTO_INCREMENT,
-            user_id bigint(20) NOT NULL DEFAULT 0,
-            order_id bigint(20) NOT NULL,
-            acknowledgment_text text,
-            ip_address varchar(45),
-            user_agent text,
-            created_at datetime DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (id),
-            KEY user_id (user_id),
-            KEY order_id (order_id),
-            KEY created_at (created_at)
-        ) $charset_collate;";
-
-        // Dispute evidence table (enhanced with file paths)
-        $evidence_table = $wpdb->prefix . 'wcm_dispute_evidence';
-        $sql .= "CREATE TABLE IF NOT EXISTS $evidence_table (
-            id bigint(20) NOT NULL AUTO_INCREMENT,
-            dispute_id varchar(100) NOT NULL,
-            order_id bigint(20) NOT NULL,
-            customer_email varchar(255) NOT NULL,
-            stripe_dispute_id varchar(100),
-            evidence_file_path varchar(500),
-            evidence_file_url varchar(500),
-            evidence_type varchar(50) NOT NULL DEFAULT 'auto_generated',
-            evidence_data longtext,
-            status varchar(50) DEFAULT 'pending',
-            created_at datetime DEFAULT CURRENT_TIMESTAMP,
-            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            PRIMARY KEY (id),
-            UNIQUE KEY stripe_dispute_id (stripe_dispute_id),
-            KEY dispute_id (dispute_id),
-            KEY order_id (order_id),
-            KEY status (status),
-            KEY customer_email (customer_email)
-        ) $charset_collate;";
-
-        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-        dbDelta($sql);
-
+        
+        // Make sure upgrade.php is available
+        if (!function_exists('dbDelta')) {
+            require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        }
+        
+        // Ensure we can create tables
+        if (!function_exists('dbDelta')) {
+            // Log error but don't fatal
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('[WCM] dbDelta function not available during activation');
+            }
+            // Continue anyway - tables might already exist
+        } else {
+            $charset_collate = $wpdb->get_charset_collate();
+            
+            // Create tables one by one to avoid dbDelta issues with multiple statements
+            $tables = array();
+            
+            // Error tracking table
+            $tables[] = array(
+                'name' => $wpdb->prefix . 'wcm_error_logs',
+                'sql' => "CREATE TABLE IF NOT EXISTS " . $wpdb->prefix . "wcm_error_logs (
+                    id bigint(20) NOT NULL AUTO_INCREMENT,
+                    error_type varchar(100) NOT NULL,
+                    error_message text NOT NULL,
+                    page_url varchar(500) NOT NULL,
+                    user_agent text,
+                    customer_email varchar(255),
+                    order_id bigint(20),
+                    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (id),
+                    KEY error_type (error_type),
+                    KEY created_at (created_at),
+                    KEY order_id (order_id)
+                ) $charset_collate"
+            );
+            
+            // Health check logs table
+            $tables[] = array(
+                'name' => $wpdb->prefix . 'wcm_health_logs',
+                'sql' => "CREATE TABLE IF NOT EXISTS " . $wpdb->prefix . "wcm_health_logs (
+                    id bigint(20) NOT NULL AUTO_INCREMENT,
+                    check_type varchar(100) NOT NULL,
+                    status varchar(50) NOT NULL,
+                    details text NOT NULL,
+                    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (id),
+                    KEY check_type (check_type),
+                    KEY status (status),
+                    KEY created_at (created_at)
+                ) $charset_collate"
+            );
+            
+            // Recovery log table (from Wp-Refund)
+            $tables[] = array(
+                'name' => $wpdb->prefix . 'wcm_recovery_log',
+                'sql' => "CREATE TABLE IF NOT EXISTS " . $wpdb->prefix . "wcm_recovery_log (
+                    id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+                    subscription_id bigint(20) unsigned NOT NULL,
+                    order_id bigint(20) unsigned DEFAULT NULL,
+                    recovery_order_id bigint(20) unsigned DEFAULT NULL,
+                    customer_id bigint(20) unsigned NOT NULL,
+                    discount_amount decimal(10,2) NOT NULL DEFAULT 0.00,
+                    regular_total decimal(10,2) NOT NULL DEFAULT 0.00,
+                    subscription_total decimal(10,2) NOT NULL DEFAULT 0.00,
+                    charge_status varchar(20) NOT NULL DEFAULT 'pending',
+                    charge_type varchar(30) DEFAULT NULL,
+                    charge_date datetime DEFAULT NULL,
+                    created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    notes text DEFAULT NULL,
+                    PRIMARY KEY (id),
+                    KEY subscription_id (subscription_id),
+                    KEY customer_id (customer_id),
+                    KEY charge_status (charge_status)
+                ) $charset_collate"
+            );
+            
+            // Subscription acknowledgments table
+            $tables[] = array(
+                'name' => $wpdb->prefix . 'woo_subscription_acknowledgments',
+                'sql' => "CREATE TABLE IF NOT EXISTS " . $wpdb->prefix . "woo_subscription_acknowledgments (
+                    id bigint(20) NOT NULL AUTO_INCREMENT,
+                    user_id bigint(20) NOT NULL DEFAULT 0,
+                    order_id bigint(20) NOT NULL,
+                    acknowledgment_text text,
+                    ip_address varchar(45),
+                    user_agent text,
+                    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (id),
+                    KEY user_id (user_id),
+                    KEY order_id (order_id),
+                    KEY created_at (created_at)
+                ) $charset_collate"
+            );
+            
+            // Dispute evidence table (enhanced with file paths)
+            $tables[] = array(
+                'name' => $wpdb->prefix . 'wcm_dispute_evidence',
+                'sql' => "CREATE TABLE IF NOT EXISTS " . $wpdb->prefix . "wcm_dispute_evidence (
+                    id bigint(20) NOT NULL AUTO_INCREMENT,
+                    dispute_id varchar(100) NOT NULL,
+                    order_id bigint(20) NOT NULL,
+                    customer_email varchar(255) NOT NULL,
+                    stripe_dispute_id varchar(100),
+                    evidence_file_path varchar(500),
+                    evidence_file_url varchar(500),
+                    evidence_type varchar(50) NOT NULL DEFAULT 'auto_generated',
+                    evidence_data longtext,
+                    status varchar(50) DEFAULT 'pending',
+                    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+                    updated_at datetime DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (id),
+                    UNIQUE KEY stripe_dispute_id (stripe_dispute_id),
+                    KEY dispute_id (dispute_id),
+                    KEY order_id (order_id),
+                    KEY status (status),
+                    KEY customer_email (customer_email)
+                ) $charset_collate"
+            );
+            
+            // Create each table separately
+            foreach ($tables as $table) {
+                $result = dbDelta($table['sql']);
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    error_log('[WCM] Created table ' . $table['name'] . ': ' . implode(', ', $result));
+                }
+            }
+        }
+        
         // Auto-configure plugin with smart defaults
         $this->auto_configure_plugin();
 
