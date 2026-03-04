@@ -27,6 +27,9 @@ class WCM_Error_Tracker {
 
         // AJAX: test connection to monitoring server (settings page)
         add_action( 'wp_ajax_wcm_test_connection', array( $this, 'ajax_test_connection' ) );
+        // AJAX: fallback error reporting (if REST API fails)
+        add_action( 'wp_ajax_wcm_report_error', array( $this, 'ajax_report_error' ) );
+        add_action( 'wp_ajax_nopriv_wcm_report_error', array( $this, 'ajax_report_error' ) );
     }
 
     // ================================================================
@@ -186,6 +189,45 @@ class WCM_Error_Tracker {
         }
 
         wp_send_json_error( sprintf( 'Server returned HTTP %d.', $code ) );
+    }
+
+    /**
+     * AJAX handler for error reporting (fallback when REST API fails)
+     */
+    public function ajax_report_error() {
+        // Check nonce
+        check_ajax_referer( 'wcm_error_tracking', 'nonce' );
+        
+        // Rate limiting (same as REST endpoint)
+        $ip  = $this->get_client_ip();
+        $key = 'wcm_err_' . md5( $ip );
+        $count = (int) get_transient( $key );
+        
+        if ( $count >= self::RATE_LIMIT ) {
+            wp_send_json_error( 'Too many error reports. Try again later.', 429 );
+            wp_die();
+        }
+        
+        set_transient( $key, $count + 1, HOUR_IN_SECONDS );
+        
+        // Sanitize input
+        $error_type     = isset( $_POST['error_type'] ) ? sanitize_text_field( wp_unslash( $_POST['error_type'] ) ) : '';
+        $error_message  = isset( $_POST['error_message'] ) ? sanitize_textarea_field( wp_unslash( $_POST['error_message'] ) ) : '';
+        $page_url       = isset( $_POST['page_url'] ) ? esc_url_raw( wp_unslash( $_POST['page_url'] ) ) : '';
+        $user_agent     = isset( $_POST['user_agent'] ) ? sanitize_text_field( wp_unslash( $_POST['user_agent'] ) ) : '';
+        $customer_email = isset( $_POST['customer_email'] ) ? sanitize_email( wp_unslash( $_POST['customer_email'] ) ) : '';
+        $order_id       = isset( $_POST['order_id'] ) ? absint( $_POST['order_id'] ) : 0;
+        
+        if ( empty( $error_type ) || empty( $error_message ) ) {
+            wp_send_json_error( 'Missing required fields', 400 );
+            wp_die();
+        }
+        
+        $this->log_error( $error_type, $error_message, $page_url, $user_agent, $customer_email, $order_id );
+        $this->send_to_monitoring_server( $error_type, $error_message, $page_url, $user_agent, $customer_email, $order_id );
+        
+        wp_send_json_success();
+        wp_die();
     }
 
     // ================================================================

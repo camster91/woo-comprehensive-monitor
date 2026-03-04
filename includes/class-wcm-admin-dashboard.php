@@ -210,7 +210,14 @@ class WCM_Admin_Dashboard {
                     <?php foreach ( $disputes as $dispute ) : ?>
                     <tr>
                         <td><?php echo esc_html( $dispute->id ); ?></td>
-                        <td><a href="<?php echo esc_url( admin_url( 'post.php?post=' . $dispute->order_id . '&action=edit' ) ); ?>">#<?php echo esc_html( $dispute->order_id ); ?></a></td>
+                        <td><?php
+                $order = wc_get_order( $dispute->order_id );
+                if ( $order ) {
+                    printf( '<a href="%s">#%s</a>', esc_url( $order->get_edit_order_url() ), esc_html( $dispute->order_id ) );
+                } else {
+                    echo '#' . esc_html( $dispute->order_id );
+                }
+            ?></td>
                         <td><?php echo esc_html( $dispute->customer_email ); ?></td>
                         <td><?php echo $dispute->stripe_dispute_id ? esc_html( $dispute->stripe_dispute_id ) : '—'; ?></td>
                         <td><span class="wcm-status-badge wcm-status-<?php echo esc_attr( $dispute->status ); ?>"><?php echo esc_html( ucfirst( str_replace( '_', ' ', $dispute->status ) ) ); ?></span></td>
@@ -397,7 +404,7 @@ class WCM_Admin_Dashboard {
             <div class="wcm-info-box">
                 <h3><?php esc_html_e( 'How It Works', 'woo-comprehensive-monitor' ); ?></h3>
                 <p><?php esc_html_e( 'When a customer cancels their subscription or converts to a one-time purchase, the system finds the correct one-time product price and charges the difference. This prevents customers from subscribing just to get a discount.', 'woo-comprehensive-monitor' ); ?></p>
-                <p><?php esc_html_e( 'Set the one-time price on your products under Product → Pricing → "One-Time Price". If not set, the system auto-detects from sibling variations or the regular price.', 'woo-comprehensive-monitor' ); ?></p>
+                <p><?php esc_html_e( 'Set the one-time price on your products under Product → Pricing → "One-Time Price" or link to a one-time variation. If not set, the charge is skipped — no guessing from regular prices.', 'woo-comprehensive-monitor' ); ?></p>
             </div>
 
             <?php
@@ -443,7 +450,14 @@ class WCM_Admin_Dashboard {
                         </td>
                         <td>
                             <?php if ( $log->recovery_order_id ) : ?>
-                                <a href="<?php echo esc_url( admin_url( 'post.php?post=' . $log->recovery_order_id . '&action=edit' ) ); ?>">#<?php echo esc_html( $log->recovery_order_id ); ?></a>
+                                <?php
+                                    $recovery_order = $log->recovery_order_id ? wc_get_order( $log->recovery_order_id ) : null;
+                                    if ( $recovery_order ) {
+                                        printf( '<a href="%s">#%s</a>', esc_url( $recovery_order->get_edit_order_url() ), esc_html( $log->recovery_order_id ) );
+                                    } else {
+                                        echo '#' . esc_html( $log->recovery_order_id );
+                                    }
+                                ?>
                             <?php else : ?>—<?php endif; ?>
                         </td>
                     </tr>

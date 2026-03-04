@@ -49,6 +49,37 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// API Key authentication middleware for protected endpoints
+const apiKeyMiddleware = (req, res, next) => {
+  // Always allow GET requests (read-only)
+  if (req.method === 'GET') {
+    return next();
+  }
+  
+  // Always allow error tracking endpoint (POST from stores)
+  if (req.path === '/api/track-woo-error') {
+    return next();
+  }
+  
+  // Check API key for all other non-GET requests
+  const apiKey = req.headers['x-api-key'] || req.query.apiKey;
+  const validApiKey = process.env.API_KEY;
+  
+  if (!validApiKey) {
+    // If no API key is configured, allow access (development mode)
+    console.warn('⚠️  API_KEY not configured in .env - skipping authentication');
+    return next();
+  }
+  
+  if (!apiKey || apiKey !== validApiKey) {
+    return res.status(401).json({ error: 'Invalid or missing API key' });
+  }
+  
+  next();
+};
+
+app.use(apiKeyMiddleware);
+
 // ==========================================
 // 1. EMAIL ALERTING SYSTEM (Mailgun API)
 // ==========================================

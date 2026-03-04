@@ -131,6 +131,13 @@ class WCM_Helpers {
         if ( $result ) {
             $order = wc_get_order( $order_id );
             if ( $order ) {
+                $acknowledgment = array(
+                    'timestamp'  => current_time( 'mysql' ),
+                    'ip_address' => $ip_address,
+                    'user_agent' => isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '',
+                );
+                $order->update_meta_data( '_wcm_subscription_acknowledgment', $acknowledgment );
+                // Keep old keys for backward compatibility
                 $order->update_meta_data( '_wcm_acknowledgment', 'yes' );
                 $order->update_meta_data( '_wcm_acknowledgment_timestamp', current_time( 'mysql' ) );
                 $order->update_meta_data( '_wcm_acknowledgment_ip', $ip_address );
@@ -189,5 +196,42 @@ class WCM_Helpers {
         if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
             error_log( '[WCM][' . $type . '] ' . $message );
         }
+    }
+
+    /**
+     * Send event to monitoring server
+     *
+     * @param string $event_type Type of event (e.g., 'preorder_charged', 'subscription_price_adjustment')
+     * @param array  $data       Event data
+     * @return bool|WP_Error True on success (or async send started), WP_Error on failure
+     */
+    public static function send_event_to_server( $event_type, $data = array() ) {
+        $server = get_option( 'wcm_monitoring_server', '' );
+        if ( empty( $server ) ) {
+            return new WP_Error( 'no_server', 'No monitoring server configured.' );
+        }
+
+        $event_data = array_merge( array(
+            'type'       => $event_type,
+            'store_url'  => home_url(),
+            'store_name' => get_bloginfo( 'name' ),
+            'store_id'   => get_option( 'wcm_store_id' ),
+            'timestamp'  => current_time( 'mysql' ),
+        ), $data );
+
+        $response = wp_remote_post( $server, array(
+            'method'      => 'POST',
+            'timeout'     => 5,
+            'blocking'    => false, // Async
+            'headers'     => array( 'Content-Type' => 'application/json' ),
+            'body'        => wp_json_encode( $event_data ),
+            'data_format' => 'body',
+        ) );
+
+        if ( is_wp_error( $response ) ) {
+            return $response;
+        }
+
+        return true;
     }
 }

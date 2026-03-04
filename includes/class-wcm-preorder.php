@@ -308,6 +308,13 @@ class WCM_PreOrder {
         if ( ! $order || ! self::order_has_preorder_items( $order ) ) return;
         $this->save_stripe_meta( $order );
         $order->update_status( 'pre-ordered', __( 'Payment method saved. Order will be charged when shipped.', 'woo-comprehensive-monitor' ) );
+        // Notify monitoring server
+        WCM_Helpers::send_event_to_server( 'preorder_created', array(
+            'order_id'       => $order->get_id(),
+            'amount'         => $order->get_total(),
+            'currency'       => $order->get_currency(),
+            'customer_email' => $order->get_billing_email(),
+        ) );
     }
 
     public function maybe_intercept_processing( $order_id ) {
@@ -317,6 +324,13 @@ class WCM_PreOrder {
         if ( ! self::order_has_preorder_items( $order ) ) return;
         $this->save_stripe_meta( $order );
         $order->update_status( 'pre-ordered', __( 'Payment method saved. Order will be charged when shipped.', 'woo-comprehensive-monitor' ) );
+        // Notify monitoring server (duplicate event if also triggered by handle_payment_complete, but harmless)
+        WCM_Helpers::send_event_to_server( 'preorder_created', array(
+            'order_id'       => $order->get_id(),
+            'amount'         => $order->get_total(),
+            'currency'       => $order->get_currency(),
+            'customer_email' => $order->get_billing_email(),
+        ) );
     }
 
     private function save_stripe_meta( $order ) {
@@ -387,11 +401,27 @@ class WCM_PreOrder {
                 $order->save();
                 wp_schedule_single_event( time() + DAY_IN_SECONDS, 'wcm_preorder_retry_charge', array( $order->get_id() ) );
                 do_action( 'wcm_preorder_payment_failed', $order->get_id() );
+                // Notify monitoring server
+                WCM_Helpers::send_event_to_server( 'preorder_charge_failed', array(
+                    'order_id'       => $order->get_id(),
+                    'amount'         => $amount,
+                    'currency'       => $currency,
+                    'error'          => $error,
+                    'retry_scheduled' => true,
+                ) );
             } else {
                 $order->update_meta_data( '_preorder_charge_status', 'failed' );
                 $order->update_status( 'pre-order-fail', __( 'Pre-order charge failed after retry.', 'woo-comprehensive-monitor' ) );
                 $order->save();
                 do_action( 'wcm_preorder_payment_failed', $order->get_id() );
+                // Notify monitoring server
+                WCM_Helpers::send_event_to_server( 'preorder_charge_failed', array(
+                    'order_id'       => $order->get_id(),
+                    'amount'         => $amount,
+                    'currency'       => $currency,
+                    'error'          => $error,
+                    'retry_scheduled' => false,
+                ) );
             }
             return;
         }
@@ -404,6 +434,14 @@ class WCM_PreOrder {
             $order->payment_complete( $response->id );
             $order->add_order_note( sprintf( __( 'Pre-order charged. PaymentIntent: %s', 'woo-comprehensive-monitor' ), $response->id ) );
             do_action( 'wcm_preorder_payment_charged', $order->get_id() );
+            // Notify monitoring server
+            WCM_Helpers::send_event_to_server( 'preorder_charge_success', array(
+                'order_id'          => $order->get_id(),
+                'amount'            => $amount,
+                'currency'          => $currency,
+                'payment_intent_id' => $response->id,
+                'customer_id'       => $customer_id,
+            ) );
         } else {
             $order->add_order_note( sprintf( __( 'Pre-order requires additional authentication. Status: %s', 'woo-comprehensive-monitor' ), $response->status ?? 'unknown' ) );
             $order->update_status( 'pre-order-fail' );

@@ -3,7 +3,7 @@
  * Plugin Name: WooCommerce Comprehensive Monitor & Dispute Protection
  * Plugin URI: https://ashbi.ca
  * Description: Complete WooCommerce monitoring, error tracking, dispute protection, and health alerts. Combines frontend monitoring, dispute evidence generation, and centralized health reporting.
- * Version: 4.3.0
+ * Version: 4.4.0
  * Author: Ashbi
  * Author URI: https://ashbi.ca
  * License: GPL2
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('WCM_VERSION', '4.3.0');
+define('WCM_VERSION', '4.4.0');
 define('WCM_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WCM_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('WCM_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -100,12 +100,25 @@ class WooComprehensiveMonitor {
         if (get_option('wcm_auto_connected') === '1' && !get_transient('wcm_show_welcome_notice')) {
             set_transient('wcm_show_welcome_notice', true, 60); // Show for 1 minute
         }
+        
+        // Custom cron schedules
+        add_filter('cron_schedules', array($this, 'add_custom_schedules'));
+        
+        // Log cleanup hook
+        add_action('wcm_daily_log_cleanup', array($this, 'cleanup_old_logs'));
     }
 
     /**
      * Initialize plugin components
      */
     public function init_components() {
+        // Check version upgrade
+        $stored_version = get_option( 'wcm_plugin_version', '0' );
+        if ( version_compare( $stored_version, WCM_VERSION, '<' ) ) {
+            $this->upgrade_plugin( $stored_version, WCM_VERSION );
+            update_option( 'wcm_plugin_version', WCM_VERSION );
+        }
+        
         // Check if WooCommerce is active
         if (!class_exists('WooCommerce')) {
             add_action('admin_notices', array($this, 'woocommerce_missing_notice'));
@@ -127,6 +140,35 @@ class WooComprehensiveMonitor {
         $this->checkout = WCM_Checkout::get_instance();
         $this->subscription_protector = WCM_Subscription_Protector::get_instance();
         $this->preorder = WCM_PreOrder::get_instance();
+    }
+
+    /**
+     * Handle plugin upgrades between versions
+     */
+    private function upgrade_plugin( $from_version, $to_version ) {
+        // Flush rewrite rules for new endpoints
+        flush_rewrite_rules();
+        
+        // Reschedule cron jobs with updated intervals
+        wp_clear_scheduled_hook( 'wcm_daily_health_check' );
+        wp_clear_scheduled_hook( 'wcm_hourly_dispute_check' );
+        wp_clear_scheduled_hook( 'wcm_daily_log_cleanup' );
+        
+        // Re-schedule events
+        if ( ! wp_next_scheduled( 'wcm_daily_health_check' ) ) {
+            wp_schedule_event( time(), 'hourly', 'wcm_daily_health_check' );
+        }
+        if ( ! wp_next_scheduled( 'wcm_hourly_dispute_check' ) ) {
+            wp_schedule_event( time(), 'hourly', 'wcm_hourly_dispute_check' );
+        }
+        if ( ! wp_next_scheduled( 'wcm_daily_log_cleanup' ) ) {
+            wp_schedule_event( time(), 'daily', 'wcm_daily_log_cleanup' );
+        }
+        
+        // Log the upgrade
+        if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+            error_log( sprintf( '[WCM] Upgraded from v%s to v%s', $from_version, $to_version ) );
+        }
     }
 
     /**
@@ -249,6 +291,9 @@ class WooComprehensiveMonitor {
         
         // Send activation notice to monitoring server
         $this->send_activation_notice();
+        
+        // Flush rewrite rules for price-adjustments endpoint
+        flush_rewrite_rules();
     }
     
     /**
@@ -306,6 +351,11 @@ class WooComprehensiveMonitor {
         if (!wp_next_scheduled('wcm_hourly_dispute_check')) {
             wp_schedule_event(time(), 'hourly', 'wcm_hourly_dispute_check');
         }
+        
+        // Schedule log cleanup
+        if (!wp_next_scheduled('wcm_daily_log_cleanup')) {
+            wp_schedule_event(time(), 'daily', 'wcm_daily_log_cleanup');
+        }
     }
     
     /**
@@ -362,9 +412,13 @@ class WooComprehensiveMonitor {
         // Clear scheduled events
         wp_clear_scheduled_hook('wcm_daily_health_check');
         wp_clear_scheduled_hook('wcm_hourly_dispute_check');
+        wp_clear_scheduled_hook('wcm_daily_log_cleanup');
         
         // Send deactivation notice
         $this->send_deactivation_notice();
+        
+        // Clean up rewrite rules
+        flush_rewrite_rules();
     }
     
     /**
@@ -393,6 +447,52 @@ class WooComprehensiveMonitor {
         ));
     }
     
+    /**
+     * Clean up old logs based on retention setting
+     */
+    public function cleanup_old_logs() {
+        $retention_days = get_option( 'wcm_log_retention_days', 30 );
+        if ( $retention_days < 1 ) {
+            return;
+        }
+        global $wpdb;
+        $cutoff = gmdate( 'Y-m-d H:i:s', strtotime( "-{$retention_days} days" ) );
+        
+        // Clean error logs
+        $wpdb->query( $wpdb->prepare(
+            "DELETE FROM {$wpdb->prefix}wcm_error_logs WHERE created_at < %s",
+            $cutoff
+        ) );
+        
+        // Clean health logs
+        $wpdb->query( $wpdb->prepare(
+            "DELETE FROM {$wpdb->prefix}wcm_health_logs WHERE created_at < %s",
+            $cutoff
+        ) );
+        
+        // Clean dispute evidence older than double retention (disputes need longer history)
+        $dispute_cutoff = gmdate( 'Y-m-d H:i:s', strtotime( "-" . ( $retention_days * 2 ) . " days" ) );
+        $wpdb->query( $wpdb->prepare(
+            "DELETE FROM {$wpdb->prefix}wcm_dispute_evidence WHERE created_at < %s",
+            $dispute_cutoff
+        ) );
+    }
+
+    /**
+     * Add custom cron schedules
+     */
+    public function add_custom_schedules( $schedules ) {
+        $interval = get_option( 'wcm_health_check_interval', 3600 );
+        // Ensure interval is at least 300 seconds (5 minutes) and not more than 86400 (1 day)
+        $interval = max( 300, min( 86400, $interval ) );
+        
+        $schedules['wcm_health_check_interval'] = array(
+            'interval' => $interval,
+            'display'  => sprintf( __( 'Every %d seconds', 'woo-comprehensive-monitor' ), $interval ),
+        );
+        return $schedules;
+    }
+
     /**
      * Show welcome notice after activation
      */

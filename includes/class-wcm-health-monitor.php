@@ -26,6 +26,18 @@ class WCM_Health_Monitor {
         if ( '1' !== get_option( 'wcm_enable_health_monitoring', '1' ) ) {
             return array();
         }
+        
+        // Respect health check interval setting
+        $interval = get_option( 'wcm_health_check_interval', 3600 );
+        $last_run = get_option( 'wcm_health_last_run', 0 );
+        $now = time();
+        
+        if ( $last_run && ( $now - $last_run ) < $interval ) {
+            // Not enough time has passed since last run
+            return array();
+        }
+        
+        update_option( 'wcm_health_last_run', $now );
 
         $checks = array();
         $checks[] = $this->check_woocommerce_status();

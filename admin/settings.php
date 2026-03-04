@@ -102,6 +102,9 @@ function wcm_save_settings() {
         update_option('wcm_alert_email', sanitize_email($_POST['wcm_alert_email']));
     }
     
+    // Force all products checkbox
+    update_option('wcm_force_all_products', isset($_POST['wcm_force_all_products']) ? '1' : '0');
+    
     // Error tracking settings
     $error_tracking_options = array(
         'wcm_track_js_errors',
@@ -236,6 +239,25 @@ function wcm_render_general_settings() {
                        class="regular-text">
                 <p class="description">
                     <?php _e('Email address where critical alerts will be sent.', 'woo-comprehensive-monitor'); ?>
+                </p>
+            </td>
+        </tr>
+        
+        <tr>
+            <th scope="row">
+                <label for="wcm_force_all_products"><?php _e('Force All Products', 'woo-comprehensive-monitor'); ?></label>
+            </th>
+            <td>
+                <label>
+                    <input type="checkbox" 
+                           id="wcm_force_all_products" 
+                           name="wcm_force_all_products" 
+                           value="1" 
+                           <?php checked( get_option( 'wcm_force_all_products', '0' ), '1' ); ?>>
+                    <?php _e('Require acknowledgment for ALL products (not just subscriptions)', 'woo-comprehensive-monitor'); ?>
+                </label>
+                <p class="description">
+                    <?php _e('If enabled, customers must acknowledge the recurring payment terms for any purchase, even one-time products.', 'woo-comprehensive-monitor'); ?>
                 </p>
             </td>
         </tr>

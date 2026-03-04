@@ -60,6 +60,13 @@ class WCM_Checkout {
             return;
         }
         if ( ! empty( $_POST['wcm_subscription_acknowledgment'] ) ) {
+            $acknowledgment = array(
+                'timestamp'  => current_time( 'mysql' ),
+                'ip_address' => WCM_Helpers::get_customer_ip(),
+                'user_agent' => isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '',
+            );
+            $order->update_meta_data( '_wcm_subscription_acknowledgment', $acknowledgment );
+            // Keep old keys for backward compatibility
             $order->update_meta_data( '_wcm_acknowledgment', 'yes' );
             $order->update_meta_data( '_wcm_acknowledgment_timestamp', current_time( 'mysql' ) );
             $order->update_meta_data( '_wcm_acknowledgment_ip', WCM_Helpers::get_customer_ip() );
