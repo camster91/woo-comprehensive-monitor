@@ -845,24 +845,31 @@ class WCM_Subscription_Protector {
             'description' => __( 'The equivalent one-time purchase price. When a subscriber cancels or converts, they are charged the difference between this and what they paid. Leave blank and use linked product instead if preferred.', 'woo-comprehensive-monitor' ),
         ) );
 
-        // Product search field for linking to one-time equivalent
+        // Product/variation search field for linking to the one-time variation
         ?>
         <p class="form-field _wcm_onetime_product_id_field">
-            <label for="_wcm_onetime_product_id"><?php esc_html_e( 'Linked One-Time Product', 'woo-comprehensive-monitor' ); ?></label>
+            <label for="_wcm_onetime_product_id"><?php esc_html_e( 'Linked One-Time Variation', 'woo-comprehensive-monitor' ); ?></label>
             <select class="wc-product-search" style="width:50%;"
                     id="_wcm_onetime_product_id"
                     name="_wcm_onetime_product_id"
-                    data-placeholder="<?php esc_attr_e( 'Search for a product…', 'woo-comprehensive-monitor' ); ?>"
-                    data-action="woocommerce_json_search_products"
+                    data-placeholder="<?php esc_attr_e( 'Search for the one-time variation…', 'woo-comprehensive-monitor' ); ?>"
+                    data-action="woocommerce_json_search_products_and_variations"
                     data-exclude="<?php echo esc_attr( $post->ID ); ?>">
                 <?php
                 $linked_id = get_post_meta( $post->ID, '_wcm_onetime_product_id', true );
                 if ( $linked_id ) {
                     $linked = wc_get_product( $linked_id );
                     if ( $linked ) {
+                        $label = $linked->get_name();
+                        if ( $linked->is_type( 'variation' ) ) {
+                            $attrs = $linked->get_variation_attributes();
+                            if ( ! empty( $attrs ) ) {
+                                $label .= ' — ' . implode( ', ', array_filter( $attrs ) );
+                            }
+                        }
                         printf( '<option value="%d" selected>%s (#%d — %s)</option>',
                             esc_attr( $linked_id ),
-                            esc_html( $linked->get_name() ),
+                            esc_html( $label ),
                             $linked_id,
                             wp_strip_all_tags( wc_price( $linked->get_price() ) )
                         );
@@ -870,7 +877,7 @@ class WCM_Subscription_Protector {
                 }
                 ?>
             </select>
-            <?php echo wc_help_tip( __( 'Link this subscription product to its one-time equivalent. The linked product\'s price is used when calculating the difference. Takes priority over "One-Time Price" if both are set — actually no, "One-Time Price" takes priority.', 'woo-comprehensive-monitor' ) ); ?>
+            <?php echo wc_help_tip( __( 'Select the specific one-time variation of this product. The system reads its actual WooCommerce price when charging the difference. Example: search for "Coffee — One-Time" and select the variation.', 'woo-comprehensive-monitor' ) ); ?>
         </p>
         <?php
         echo '</div>';
