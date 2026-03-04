@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WooCommerce Monitor Dashboard</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#333;min-height:100vh}
+.container{max-width:1400px;margin:0 auto;padding:20px}
+header{background:linear-gradient(135deg,#2c3e50,#3498db);color:#fff;padding:24px 30px;border-radius:12px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+header h1{font-size:24px;display:flex;align-items:center;gap:10px}
+header p{opacity:.85;font-size:14px}
+.header-actions{display:flex;gap:10px}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:10px 18px;border-radius:8px;border:none;cursor:pointer;font-size:14px;font-weight:600;transition:all .2s}
+.btn-primary{background:#fff;color:#2c3e50}
+.btn-primary:hover{background:#f0f0f0}
+.btn-success{background:#27ae60;color:#fff}
+.btn-success:hover{background:#219a52}
+.btn-danger{background:#e74c3c;color:#fff}
+.btn-danger:hover{background:#c0392b}
+.btn-outline{background:transparent;color:#fff;border:2px solid rgba(255,255,255,.4)}
+.btn-outline:hover{border-color:#fff;background:rgba(255,255,255,.1)}
+.btn-sm{padding:6px 12px;font-size:13px}
+
+/* Stats */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px}
+.stat{background:#fff;padding:24px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.06);text-align:center}
+.stat h3{color:#888;font-size:12px;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+.stat .value{font-size:36px;font-weight:700}
+.stat .value.critical{color:#e74c3c}
+.stat .value.warning{color:#f39c12}
+.stat .value.good{color:#27ae60}
+
+/* Tabs */
+.tabs{display:flex;gap:4px;margin-bottom:24px;background:#fff;padding:6px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.tab{padding:10px 20px;border-radius:8px;cursor:pointer;font-weight:600;font-size:14px;color:#666;transition:all .2s;border:none;background:transparent}
+.tab.active{background:#3498db;color:#fff}
+.tab:hover:not(.active){background:#f0f2f5}
+
+/* Panels */
+.panel{display:none;background:#fff;border-radius:12px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.panel.active{display:block}
+
+/* Stores */
+.stores-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
+.store-card{border:1px solid #e8e8e8;border-radius:10px;padding:20px;transition:all .2s}
+.store-card:hover{border-color:#3498db;box-shadow:0 4px 12px rgba(52,152,219,.15)}
+.store-card h3{font-size:16px;margin-bottom:4px}
+.store-card .url{color:#888;font-size:13px;margin-bottom:12px;word-break:break-all}
+.store-card .meta{display:flex;gap:8px;flex-wrap:wrap}
+.store-card .meta span{background:#f0f2f5;padding:3px 8px;border-radius:4px;font-size:12px;color:#666}
+.store-card .actions{margin-top:12px;display:flex;gap:8px}
+
+/* Alerts */
+.alert-item{padding:16px;border-radius:10px;margin-bottom:10px;border-left:4px solid #ddd;background:#fafafa;display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.alert-item.critical{border-left-color:#e74c3c;background:#fef5f5}
+.alert-item.high{border-left-color:#f39c12;background:#fefbf0}
+.alert-item.medium{border-left-color:#3498db;background:#f0f8ff}
+.alert-item.success{border-left-color:#27ae60;background:#f0faf5}
+.alert-item .time{color:#888;font-size:12px}
+.alert-item .subject{font-weight:600;margin:4px 0}
+.alert-item .message{font-size:13px;color:#666;white-space:pre-wrap;max-height:60px;overflow:hidden}
+.alert-item .delete-btn{color:#e74c3c;cursor:pointer;font-size:18px;flex-shrink:0;background:none;border:none;padding:4px}
+
+/* Add Store Form */
+.add-store-form{background:#f8f9fa;border-radius:10px;padding:24px;margin-bottom:20px}
+.add-store-form h3{margin-bottom:16px;font-size:16px}
+.form-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:12px}
+.form-group label{display:block;font-size:13px;font-weight:600;color:#666;margin-bottom:4px}
+.form-group input{width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px}
+.form-group input:focus{outline:none;border-color:#3498db;box-shadow:0 0 0 3px rgba(52,152,219,.15)}
+.form-help{font-size:12px;color:#999;margin-top:4px}
+
+/* Plugin Download */
+.plugin-download{background:linear-gradient(135deg,#f8f9fa,#e8f4fd);border:2px dashed #3498db;border-radius:12px;padding:30px;text-align:center;margin-bottom:20px}
+.plugin-download h3{color:#2c3e50;margin-bottom:8px}
+.plugin-download p{color:#666;margin-bottom:16px;font-size:14px}
+.plugin-download .download-link{display:inline-flex;align-items:center;gap:8px;padding:12px 24px;background:#3498db;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:14px;transition:background .2s}
+.plugin-download .download-link:hover{background:#2980b9}
+
+.empty{text-align:center;padding:40px;color:#999}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.badge-api{background:#d4edda;color:#155724}
+.badge-plugin{background:#cce5ff;color:#004085}
+
+@media(max-width:768px){
+  header{flex-direction:column;text-align:center}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .stores-grid{grid-template-columns:1fr}
+  .tabs{overflow-x:auto}
+  .form-row{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div>
+      <h1>🚀 WooCommerce Monitor</h1>
+      <p>Multi-store monitoring & dispute protection</p>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-primary" onclick="loadDashboard()">🔄 Refresh</button>
+      <button class="btn btn-outline" onclick="switchTab('stores')">📦 Stores</button>
+    </div>
+  </header>
+
+  <div id="stats" class="stats"></div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="alerts" onclick="switchTab('alerts')">📨 Alerts</button>
+    <button class="tab" data-tab="stores" onclick="switchTab('stores')">🏪 Stores</button>
+    <button class="tab" data-tab="add-store" onclick="switchTab('add-store')">➕ Add Store</button>
+    <button class="tab" data-tab="plugin" onclick="switchTab('plugin')">📥 Plugin</button>
+  </div>
+
+  <!-- ALERTS PANEL -->
+  <div id="panel-alerts" class="panel active">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h2>Recent Alerts</h2>
+      <button class="btn btn-danger btn-sm" onclick="clearAlerts()">🗑️ Clear All</button>
+    </div>
+    <div id="alerts-list"></div>
+  </div>
+
+  <!-- STORES PANEL -->
+  <div id="panel-stores" class="panel">
+    <h2 style="margin-bottom:16px">Monitored Stores</h2>
+    <div id="stores-list" class="stores-grid"></div>
+  </div>
+
+  <!-- ADD STORE PANEL -->
+  <div id="panel-add-store" class="panel">
+    <div class="add-store-form">
+      <h3>Add a New Store</h3>
+      <p style="color:#666;margin-bottom:16px;font-size:14px">
+        Add a WooCommerce store for deep health monitoring. Install the plugin on the store for auto-connect, or add API credentials here for backend health checks.
+      </p>
+      <form id="addStoreForm" onsubmit="addStore(event)">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Store Name *</label>
+            <input type="text" id="storeName" required placeholder="My Store">
+          </div>
+          <div class="form-group">
+            <label>Store URL *</label>
+            <input type="url" id="storeUrl" required placeholder="https://mystore.com">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>WooCommerce Consumer Key</label>
+            <input type="text" id="storeKey" placeholder="ck_xxxxxxxxxxxx">
+            <div class="form-help">WooCommerce → Settings → Advanced → REST API (Read permission)</div>
+          </div>
+          <div class="form-group">
+            <label>WooCommerce Consumer Secret</label>
+            <input type="text" id="storeSecret" placeholder="cs_xxxxxxxxxxxx">
+            <div class="form-help">Required for deep health checks (Stripe, orders, etc.)</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:8px">
+          <button type="submit" class="btn btn-success">➕ Add Store</button>
+          <span id="addStoreResult" style="line-height:40px;font-size:14px"></span>
+        </div>
+      </form>
+    </div>
+
+    <h3 style="margin-bottom:12px">Existing Sites Configuration</h3>
+    <div id="sites-config" style="background:#f8f9fa;border-radius:10px;padding:16px;font-family:monospace;font-size:13px;white-space:pre-wrap;max-height:300px;overflow-y:auto"></div>
+  </div>
+
+  <!-- PLUGIN PANEL -->
+  <div id="panel-plugin" class="panel">
+    <div class="plugin-download">
+      <h3>📥 WooCommerce Comprehensive Monitor Plugin</h3>
+      <p>Install this plugin on your WooCommerce stores. It auto-connects to this monitoring server on activation — zero configuration needed.</p>
+      <a href="https://github.com/camster91/woo-comprehensive-monitor/releases/latest" target="_blank" class="download-link">
+        ⬇️ Download Latest Plugin (v4.1.0)
+      </a>
+    </div>
+
+    <div style="background:#fff;border:1px solid #e8e8e8;border-radius:10px;padding:24px">
+      <h3 style="margin-bottom:16px">Installation Steps</h3>
+      <ol style="line-height:2;color:#555;padding-left:20px">
+        <li>Download the plugin ZIP from <a href="https://github.com/camster91/woo-comprehensive-monitor/releases" target="_blank">GitHub Releases</a></li>
+        <li>WordPress Admin → Plugins → Add New → Upload Plugin</li>
+        <li>Upload the ZIP file and click Install Now</li>
+        <li>Activate the plugin — it auto-connects to <code id="serverUrl"></code></li>
+        <li>The store appears here automatically!</li>
+      </ol>
+
+      <h3 style="margin-top:24px;margin-bottom:12px">For ManageWP Batch Install</h3>
+      <ol style="line-height:2;color:#555;padding-left:20px">
+        <li>Upload the ZIP to your ManageWP plugin library</li>
+        <li>Select all your WooCommerce stores</li>
+        <li>Click Install & Activate</li>
+        <li>All stores appear in this dashboard instantly</li>
+      </ol>
+
+      <h3 style="margin-top:24px;margin-bottom:12px">Plugin Features (v4.0.0)</h3>
+      <ul style="line-height:2;color:#555;padding-left:20px">
+        <li>✅ Frontend error tracking (JS, AJAX, checkout)</li>
+        <li>✅ Subscription acknowledgment checkbox at checkout</li>
+        <li>✅ Automatic dispute evidence generation</li>
+        <li>✅ Stripe webhook integration for real-time dispute detection</li>
+        <li>✅ Health monitoring with 10+ checks</li>
+        <li>✅ WPSubscription Pro integration</li>
+        <li>💰 Subscription discount recovery (auto-charge early cancellers)</li>
+        <li>📦 Pre-order system (backorders = pre-orders, charge on ship)</li>
+        <li>🔄 Automatic retry for failed pre-order charges</li>
+        <li>💱 Price diff charger (subscription→one-time conversion)</li>
+        <li>🧑‍💼 Customer self-service "Convert to One-Time Purchase"</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+const BASE = window.location.origin;
+document.getElementById('serverUrl').textContent = BASE;
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelector('[data-tab="'+name+'"]').classList.add('active');
+  document.getElementById('panel-'+name).classList.add('active');
+  if (name === 'add-store') loadSitesConfig();
+}
+
+async function loadDashboard() {
+  try {
+    const res = await fetch('/api/dashboard');
+    const data = await res.json();
+
+    const o = data.overview;
+    document.getElementById('stats').innerHTML = `
+      <div class="stat"><h3>Stores</h3><div class="value good">${o.totalSites}</div></div>
+      <div class="stat"><h3>Critical</h3><div class="value ${o.criticalAlerts>0?'critical':'good'}">${o.criticalAlerts}</div></div>
+      <div class="stat"><h3>High</h3><div class="value ${o.highAlerts>0?'warning':'good'}">${o.highAlerts}</div></div>
+      <div class="stat"><h3>Total Alerts</h3><div class="value">${o.totalAlerts}</div></div>
+    `;
+
+    // Stores
+    const storesHtml = data.stores.length === 0
+      ? '<div class="empty">No stores connected yet. Install the plugin or add a store manually.</div>'
+      : data.stores.map(s => `
+        <div class="store-card">
+          <h3>${esc(s.name || s.url)}</h3>
+          <div class="url">${esc(s.url)}</div>
+          <div class="meta">
+            <span>ID: ${esc(s.id)}</span>
+            ${s.consumerKey ? '<span class="badge badge-api">API ✓</span>' : '<span class="badge badge-plugin">Plugin Only</span>'}
+          </div>
+          <div class="actions">
+            <button class="btn btn-sm btn-danger" onclick="removeStore('${esc(s.id)}')">Remove</button>
+          </div>
+        </div>
+      `).join('');
+    document.getElementById('stores-list').innerHTML = storesHtml;
+
+    // Alerts
+    const alertsHtml = data.recentAlerts.length === 0
+      ? '<div class="empty">No alerts yet. Install the plugin on a store to start monitoring.</div>'
+      : data.recentAlerts.map((a, i) => `
+        <div class="alert-item ${a.severity}">
+          <div style="flex:1">
+            <div class="time">${new Date(a.timestamp).toLocaleString()}</div>
+            <div class="subject">${esc(a.subject)}</div>
+            <div class="message">${esc(a.message.substring(0,200))}${a.message.length>200?'...':''}</div>
+          </div>
+          <button class="delete-btn" onclick="deleteAlert(${i})" title="Delete">✕</button>
+        </div>
+      `).join('');
+    document.getElementById('alerts-list').innerHTML = alertsHtml;
+
+  } catch(e) {
+    console.error('Dashboard load failed:', e);
+  }
+}
+
+async function addStore(e) {
+  e.preventDefault();
+  const result = document.getElementById('addStoreResult');
+  const name = document.getElementById('storeName').value.trim();
+  const url = document.getElementById('storeUrl').value.trim();
+  const key = document.getElementById('storeKey').value.trim();
+  const secret = document.getElementById('storeSecret').value.trim();
+
+  result.textContent = 'Adding...';
+  result.style.color = '#666';
+
+  try {
+    // Send as plugin_activated to add to sites.json
+    const res = await fetch('/api/track-woo-error', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        type: 'plugin_activated',
+        store_name: name,
+        store_url: url,
+        store_id: 'manual-' + Date.now(),
+        plugin_version: 'manual',
+        woocommerce_version: 'N/A',
+        wordpress_version: 'N/A',
+        php_version: 'N/A',
+        timestamp: new Date().toISOString(),
+        // Include API credentials if provided
+        consumerKey: key || undefined,
+        consumerSecret: secret || undefined
+      })
+    });
+
+    if (res.ok) {
+      // If API keys provided, also update via direct file manipulation
+      if (key && secret) {
+        // Reload sites to pick up new store, then we'll add credentials
+        await fetch('/api/reload-sites', {method: 'POST'});
+      }
+      result.textContent = '✅ Store added!';
+      result.style.color = '#27ae60';
+      document.getElementById('addStoreForm').reset();
+      setTimeout(() => { loadDashboard(); loadSitesConfig(); }, 1000);
+    } else {
+      result.textContent = '❌ Failed to add store';
+      result.style.color = '#e74c3c';
+    }
+  } catch(err) {
+    result.textContent = '❌ Error: ' + err.message;
+    result.style.color = '#e74c3c';
+  }
+}
+
+async function removeStore(storeId) {
+  if (!confirm('Remove this store from monitoring? This will delete it from sites.json.')) return;
+  try {
+    const res = await fetch('/api/stores/remove', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({storeId})
+    });
+    const data = await res.json();
+    if (data.success) {
+      // Also clear alerts for that store
+      await fetch('/api/dashboard/clear-alerts', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({storeId})
+      });
+      loadDashboard();
+    } else {
+      alert('Failed to remove: ' + (data.error || 'Unknown error'));
+    }
+  } catch(e) { console.error(e); alert('Error: ' + e.message); }
+}
+
+async function clearAlerts() {
+  if (!confirm('Clear ALL alerts?')) return;
+  await fetch('/api/dashboard/clear-alerts', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+  loadDashboard();
+}
+
+async function deleteAlert(index) {
+  await fetch('/api/dashboard/alerts/'+index, {method:'DELETE'});
+  loadDashboard();
+}
+
+async function loadSitesConfig() {
+  try {
+    const res = await fetch('/api/dashboard');
+    const data = await res.json();
+    const el = document.getElementById('sites-config');
+    if (data.stores.length === 0) {
+      el.textContent = '[ ] — No stores configured yet';
+    } else {
+      el.textContent = JSON.stringify(data.stores, null, 2);
+    }
+  } catch(e) {
+    document.getElementById('sites-config').textContent = 'Error loading config';
+  }
+}
+
+function esc(s) {
+  if (!s) return '';
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// Load on start + auto-refresh
+loadDashboard();
+setInterval(loadDashboard, 60000);
+</script>
+</body>
+</html>

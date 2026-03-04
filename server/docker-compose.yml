@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  woo-monitor:
+    build: .
+    container_name: woo-monitor
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      # SMTP Configuration - Set these in production
+      - SMTP_HOST=${SMTP_HOST:-smtp.ashbi.ca}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-alerts@ashbi.ca}
+      - SMTP_PASS=${SMTP_PASS:-your_password}
+      - ALERT_EMAIL=${ALERT_EMAIL:-cameron@ashbi.ca}
+    volumes:
+      # Mount sites.json for configuration updates
+      - ./sites.json:/usr/src/app/sites.json:ro
+      # Mount logs directory
+      - ./logs:/usr/src/app/logs
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - woo-monitor-network
+
+networks:
+  woo-monitor-network:
+    driver: bridge
