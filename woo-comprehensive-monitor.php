@@ -86,24 +86,24 @@ class WooComprehensiveMonitor {
 
         // Show welcome notice after activation
         add_action('admin_notices', array($this, 'show_activation_notice'));
-        
+
         // Initialize components
         add_action('plugins_loaded', array($this, 'init_components'));
-        
+
         // Load text domain
         add_action('init', array($this, 'load_textdomain'));
-        
+
         // Add settings link
         add_filter('plugin_action_links_' . WCM_PLUGIN_BASENAME, array($this, 'add_settings_link'));
-        
+
         // Set activation transient
         if (get_option('wcm_auto_connected') === '1' && !get_transient('wcm_show_welcome_notice')) {
             set_transient('wcm_show_welcome_notice', true, 60); // Show for 1 minute
         }
-        
+
         // Custom cron schedules
         add_filter('cron_schedules', array($this, 'add_custom_schedules'));
-        
+
         // Log cleanup hook
         add_action('wcm_daily_log_cleanup', array($this, 'cleanup_old_logs'));
     }
@@ -148,12 +148,12 @@ class WooComprehensiveMonitor {
     private function upgrade_plugin( $from_version, $to_version ) {
         // Flush rewrite rules for new endpoints
         flush_rewrite_rules();
-        
+
         // Reschedule cron jobs with updated intervals
         wp_clear_scheduled_hook( 'wcm_daily_health_check' );
         wp_clear_scheduled_hook( 'wcm_hourly_dispute_check' );
         wp_clear_scheduled_hook( 'wcm_daily_log_cleanup' );
-        
+
         // Re-schedule events
         if ( ! wp_next_scheduled( 'wcm_daily_health_check' ) ) {
             wp_schedule_event( time(), 'hourly', 'wcm_daily_health_check' );
@@ -164,7 +164,7 @@ class WooComprehensiveMonitor {
         if ( ! wp_next_scheduled( 'wcm_daily_log_cleanup' ) ) {
             wp_schedule_event( time(), 'daily', 'wcm_daily_log_cleanup' );
         }
-        
+
         // Log the upgrade
         if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
             error_log( sprintf( '[WCM] Upgraded from v%s to v%s', $from_version, $to_version ) );
@@ -188,9 +188,9 @@ class WooComprehensiveMonitor {
     public function activate() {
         // Create database tables
         global $wpdb;
-        
+
         $charset_collate = $wpdb->get_charset_collate();
-        
+
         // Error tracking table
         $table_name = $wpdb->prefix . 'wcm_error_logs';
         $sql = "CREATE TABLE IF NOT EXISTS $table_name (
@@ -207,7 +207,7 @@ class WooComprehensiveMonitor {
             KEY created_at (created_at),
             KEY order_id (order_id)
         ) $charset_collate;";
-        
+
         // Health check logs table
         $table_name = $wpdb->prefix . 'wcm_health_logs';
         $sql .= "CREATE TABLE IF NOT EXISTS $table_name (
@@ -221,7 +221,7 @@ class WooComprehensiveMonitor {
             KEY status (status),
             KEY created_at (created_at)
         ) $charset_collate;";
-        
+
         // Recovery log table (from Wp-Refund)
         $recovery_table = $wpdb->prefix . 'wcm_recovery_log';
         $sql .= "CREATE TABLE IF NOT EXISTS $recovery_table (
@@ -285,31 +285,31 @@ class WooComprehensiveMonitor {
 
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
         dbDelta($sql);
-        
+
         // Auto-configure plugin with smart defaults
         $this->auto_configure_plugin();
-        
+
         // Send activation notice to monitoring server
         $this->send_activation_notice();
-        
+
         // Flush rewrite rules for price-adjustments endpoint
         flush_rewrite_rules();
     }
-    
+
     /**
      * Auto-configure plugin with smart defaults
      */
     private function auto_configure_plugin() {
         // Set monitoring server URL
         $monitoring_server = 'https://woo.ashbi.ca/api/track-woo-error';
-        
+
         // Check if we should use a different server based on environment
         if (defined('WCM_MONITORING_SERVER')) {
             $monitoring_server = WCM_MONITORING_SERVER;
         } elseif (getenv('WCM_MONITORING_SERVER')) {
             $monitoring_server = getenv('WCM_MONITORING_SERVER');
         }
-        
+
         // Set default options
         $defaults = array(
             'wcm_monitoring_server' => $monitoring_server,
@@ -335,51 +335,51 @@ class WooComprehensiveMonitor {
             'wcm_connection_time' => current_time('mysql'),
             'wcm_plugin_version' => WCM_VERSION,
         );
-        
+
         foreach ($defaults as $key => $value) {
             if (!get_option($key)) {
                 add_option($key, $value);
             }
         }
-        
+
         // Schedule health checks
         if (!wp_next_scheduled('wcm_daily_health_check')) {
             wp_schedule_event(time(), 'hourly', 'wcm_daily_health_check');
         }
-        
+
         // Schedule dispute checks
         if (!wp_next_scheduled('wcm_hourly_dispute_check')) {
             wp_schedule_event(time(), 'hourly', 'wcm_hourly_dispute_check');
         }
-        
+
         // Schedule log cleanup
         if (!wp_next_scheduled('wcm_daily_log_cleanup')) {
             wp_schedule_event(time(), 'daily', 'wcm_daily_log_cleanup');
         }
     }
-    
+
     /**
      * Generate unique store ID
      */
     private function generate_store_id() {
         $site_url = get_site_url();
         $store_name = get_bloginfo('name');
-        
+
         // Create a unique but readable store ID
         $store_id = 'store-' . substr(md5($site_url), 0, 8) . '-' . time();
-        
+
         // Make it URL-safe
         $store_id = sanitize_title($store_id);
-        
+
         return $store_id;
     }
-    
+
     /**
      * Send activation notice to monitoring server
      */
     private function send_activation_notice() {
         $monitoring_server = get_option('wcm_monitoring_server', 'https://woo.ashbi.ca/api/track-woo-error');
-        
+
         $activation_data = array(
             'type' => 'plugin_activated',
             'store_url' => get_site_url(),
@@ -391,7 +391,7 @@ class WooComprehensiveMonitor {
             'php_version' => phpversion(),
             'timestamp' => current_time('mysql'),
         );
-        
+
         // Send activation notice (non-blocking)
         wp_remote_post($monitoring_server, array(
             'method' => 'POST',
@@ -413,20 +413,20 @@ class WooComprehensiveMonitor {
         wp_clear_scheduled_hook('wcm_daily_health_check');
         wp_clear_scheduled_hook('wcm_hourly_dispute_check');
         wp_clear_scheduled_hook('wcm_daily_log_cleanup');
-        
+
         // Send deactivation notice
         $this->send_deactivation_notice();
-        
+
         // Clean up rewrite rules
         flush_rewrite_rules();
     }
-    
+
     /**
      * Send deactivation notice to monitoring server
      */
     private function send_deactivation_notice() {
         $monitoring_server = get_option('wcm_monitoring_server', 'https://woo.ashbi.ca/api/track-woo-error');
-        
+
         $deactivation_data = array(
             'type' => 'plugin_deactivated',
             'store_url' => get_site_url(),
@@ -434,7 +434,7 @@ class WooComprehensiveMonitor {
             'store_id' => get_option('wcm_store_id'),
             'timestamp' => current_time('mysql'),
         );
-        
+
         wp_remote_post($monitoring_server, array(
             'method' => 'POST',
             'timeout' => 5,
@@ -446,7 +446,7 @@ class WooComprehensiveMonitor {
             'data_format' => 'body',
         ));
     }
-    
+
     /**
      * Clean up old logs based on retention setting
      */
@@ -457,19 +457,19 @@ class WooComprehensiveMonitor {
         }
         global $wpdb;
         $cutoff = gmdate( 'Y-m-d H:i:s', strtotime( "-{$retention_days} days" ) );
-        
+
         // Clean error logs
         $wpdb->query( $wpdb->prepare(
             "DELETE FROM {$wpdb->prefix}wcm_error_logs WHERE created_at < %s",
             $cutoff
         ) );
-        
+
         // Clean health logs
         $wpdb->query( $wpdb->prepare(
             "DELETE FROM {$wpdb->prefix}wcm_health_logs WHERE created_at < %s",
             $cutoff
         ) );
-        
+
         // Clean dispute evidence older than double retention (disputes need longer history)
         $dispute_cutoff = gmdate( 'Y-m-d H:i:s', strtotime( "-" . ( $retention_days * 2 ) . " days" ) );
         $wpdb->query( $wpdb->prepare(
@@ -485,7 +485,7 @@ class WooComprehensiveMonitor {
         $interval = get_option( 'wcm_health_check_interval', 3600 );
         // Ensure interval is at least 300 seconds (5 minutes) and not more than 86400 (1 day)
         $interval = max( 300, min( 86400, $interval ) );
-        
+
         $schedules['wcm_health_check_interval'] = array(
             'interval' => $interval,
             'display'  => sprintf( __( 'Every %d seconds', 'woo-comprehensive-monitor' ), $interval ),
@@ -500,7 +500,7 @@ class WooComprehensiveMonitor {
         if (get_transient('wcm_show_welcome_notice')) {
             $store_id = get_option('wcm_store_id');
             $monitoring_server = get_option('wcm_monitoring_server');
-            
+
             ?>
             <div class="notice notice-success is-dismissible">
                 <div style="display: flex; align-items: center; gap: 15px; padding: 15px 0;">
@@ -522,7 +522,7 @@ class WooComprehensiveMonitor {
                 </div>
             </div>
             <?php
-            
+
             delete_transient('wcm_show_welcome_notice');
         }
     }
