@@ -167,7 +167,14 @@ app.post("/api/track-woo-error", async (req, res) => {
 
     const existingStore = sites.find(s => s.url === req.body.store_url);
     if (!existingStore) {
-      const newStore = { id: req.body.store_id, name: req.body.store_name, url: req.body.store_url };
+      const newStore = { 
+        id: req.body.store_id, 
+        name: req.body.store_name, 
+        url: req.body.store_url,
+        plugin_version: req.body.plugin_version,
+        woocommerce_version: req.body.woocommerce_version,
+        last_seen: new Date().toISOString()
+      };
       // Include API credentials if provided (from dashboard add-store form)
       if (req.body.consumerKey) newStore.consumerKey = req.body.consumerKey;
       if (req.body.consumerSecret) newStore.consumerSecret = req.body.consumerSecret;
@@ -179,6 +186,14 @@ app.post("/api/track-woo-error", async (req, res) => {
         console.error('Failed to save sites.json:', err.message);
       }
     }
+    
+    // Update store stats
+    updateStoreStats(req.body.store_id, {
+      plugin_version: req.body.plugin_version,
+      woocommerce_version: req.body.woocommerce_version,
+      features: req.body.features || {}
+    });
+    
     await sendAlert(subject, message, req.body.store_id, "success");
     return res.status(200).json({ success: true });
   }
@@ -234,33 +249,151 @@ app.get("/api/health", (req, res) => {
   res.status(200).json({
     status: "ok",
     timestamp: new Date().toISOString(),
-    version: "2.1.0",
+    version: "2.2.0",
     features: {
       frontend_monitoring: true,
       backend_health_checks: sites.length > 0,
       email_alerts: !!process.env.MAILGUN_API_KEY && !!process.env.MAILGUN_DOMAIN,
       dashboard_api: true,
+      store_statistics: true,
+      feature_tracking: true,
       sites_monitored: sites.length
     }
   });
 });
 
 // ==========================================
-// 4. DASHBOARD API ENDPOINTS
+// 4. ENHANCED STORE DATA TRACKING
+// ==========================================
+// Store detailed statistics for each connected store
+const storeStats = {};
+
+// Initialize store stats from existing sites
+sites.forEach(site => {
+  if (site.id && !storeStats[site.id]) {
+    storeStats[site.id] = {
+      plugin_version: site.plugin_version || 'unknown',
+      woocommerce_version: site.woocommerce_version || 'unknown',
+      last_seen: site.last_seen || new Date().toISOString(),
+      features: site.features || {},
+      alerts: {
+        total: 0,
+        errors: 0,
+        disputes: 0,
+        preorders: 0,
+        price_adjustments: 0,
+        health_critical: 0
+      }
+    };
+  }
+});
+
+// Update store stats when we receive events
+function updateStoreStats(storeId, data) {
+  if (!storeStats[storeId]) {
+    storeStats[storeId] = {
+      plugin_version: data.plugin_version || 'unknown',
+      woocommerce_version: data.woocommerce_version || 'unknown',
+      last_seen: new Date().toISOString(),
+      features: {},
+      alerts: {
+        total: 0,
+        errors: 0,
+        disputes: 0,
+        preorders: 0,
+        price_adjustments: 0,
+        health_critical: 0
+      }
+    };
+  }
+  
+  // Update basic info
+  if (data.plugin_version) storeStats[storeId].plugin_version = data.plugin_version;
+  if (data.woocommerce_version) storeStats[storeId].woocommerce_version = data.woocommerce_version;
+  storeStats[storeId].last_seen = new Date().toISOString();
+  
+  // Track features if reported
+  if (data.features) {
+    storeStats[storeId].features = { ...storeStats[storeId].features, ...data.features };
+  }
+}
+
+// ==========================================
+// 5. DASHBOARD API ENDPOINTS
 // ==========================================
 app.get("/api/dashboard", (req, res) => {
+  const enhancedStores = sites.map(site => {
+    const stats = storeStats[site.id] || {};
+    const siteAlerts = alertHistory.filter(a => a.siteId === site.id);
+    
+    // Count alerts by type for this store
+    const errorAlerts = siteAlerts.filter(a => 
+      a.subject && a.subject.includes('Frontend Issue') || 
+      a.subject && a.subject.includes('health_check')
+    ).length;
+    const disputeAlerts = siteAlerts.filter(a => 
+      a.subject && a.subject.includes('DISPUTE')
+    ).length;
+    const preorderAlerts = siteAlerts.filter(a => 
+      a.subject && (a.subject.includes('PRE-ORDER') || a.subject.includes('preorder'))
+    ).length;
+    const priceAdjustmentAlerts = siteAlerts.filter(a => 
+      a.subject && a.subject.includes('PRICE ADJUSTMENT')
+    ).length;
+    
+    return {
+      id: site.id,
+      name: site.name,
+      url: site.url,
+      consumerKey: site.consumerKey || null,
+      consumerSecret: site.consumerSecret || null,
+      plugin_version: stats.plugin_version || 'unknown',
+      woocommerce_version: stats.woocommerce_version || 'unknown',
+      last_seen: stats.last_seen || site.last_seen || null,
+      features: stats.features || {},
+      alert_counts: {
+        total: siteAlerts.length,
+        errors: errorAlerts,
+        disputes: disputeAlerts,
+        preorders: preorderAlerts,
+        price_adjustments: priceAdjustmentAlerts
+      }
+    };
+  });
+  
+  // Calculate total feature usage across all stores
+  const featureUsage = {
+    error_tracking: 0,
+    dispute_protection: 0,
+    preorder_system: 0,
+    price_protection: 0,
+    health_monitoring: 0,
+    subscription_acknowledgment: 0
+  };
+  
+  enhancedStores.forEach(store => {
+    if (store.features.error_tracking) featureUsage.error_tracking++;
+    if (store.features.dispute_protection) featureUsage.dispute_protection++;
+    if (store.features.preorder_system) featureUsage.preorder_system++;
+    if (store.features.price_protection) featureUsage.price_protection++;
+    if (store.features.health_monitoring) featureUsage.health_monitoring++;
+    if (store.features.subscription_acknowledgment) featureUsage.subscription_acknowledgment++;
+  });
+  
   res.status(200).json({
     status: "ok",
     timestamp: new Date().toISOString(),
+    version: "2.2.0",
     overview: {
       totalSites: sites.length,
       criticalAlerts: alertHistory.filter(a => a.severity === "critical").length,
       highAlerts: alertHistory.filter(a => a.severity === "high").length,
       mediumAlerts: alertHistory.filter(a => a.severity === "medium").length,
-      totalAlerts: alertHistory.length
+      totalAlerts: alertHistory.length,
+      featureUsage: featureUsage
     },
-    recentAlerts: alertHistory.slice(0, 10),
-    stores: sites.map(site => ({ id: site.id, name: site.name, url: site.url }))
+    recentAlerts: alertHistory.slice(0, 20), // Show more alerts
+    stores: enhancedStores
   });
 });
 
