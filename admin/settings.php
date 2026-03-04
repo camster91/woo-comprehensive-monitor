@@ -176,6 +176,21 @@ function wcm_save_settings() {
         update_option('wcm_debug_mode', '0');
     }
     
+    // Auto-update settings
+    $auto_update_options = array(
+        'wcm_auto_updates',
+        'wcm_update_backup',
+        'wcm_update_compatibility',
+    );
+    
+    foreach ($auto_update_options as $option) {
+        update_option($option, isset($_POST[$option]) && $_POST[$option] === 'yes' ? 'yes' : 'no');
+    }
+    
+    if (isset($_POST['wcm_major_updates'])) {
+        update_option('wcm_major_updates', sanitize_text_field($_POST['wcm_major_updates']));
+    }
+    
     // Subscription price protection settings
     $sp_options = array( 'wcm_sp_auto_charge_on_cancel', 'wcm_sp_customer_conversion', 'wcm_sp_charge_method' );
     foreach ( $sp_options as $opt ) {
@@ -733,6 +748,47 @@ function wcm_render_advanced_settings() {
         <tr>
             <th scope="row"><?php _e('Store ID', 'woo-comprehensive-monitor'); ?></th>
             <td><code><?php echo esc_html($store_id); ?></code><p class="description"><?php _e('Auto-generated unique identifier for this store.', 'woo-comprehensive-monitor'); ?></p></td>
+        </tr>
+        <tr>
+            <th scope="row"><?php _e('Auto Updates', 'woo-comprehensive-monitor'); ?></th>
+            <td>
+                <label>
+                    <input type="checkbox" name="wcm_auto_updates" value="yes" <?php checked(get_option('wcm_auto_updates', 'yes'), 'yes'); ?>>
+                    <?php _e('Enable automatic updates from GitHub', 'woo-comprehensive-monitor'); ?>
+                </label>
+                <p class="description"><?php _e('Plugin will auto-update when new versions are released.', 'woo-comprehensive-monitor'); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><?php _e('Create Backup Before Update', 'woo-comprehensive-monitor'); ?></th>
+            <td>
+                <label>
+                    <input type="checkbox" name="wcm_update_backup" value="yes" <?php checked(get_option('wcm_update_backup', 'yes'), 'yes'); ?>>
+                    <?php _e('Create backup before updating', 'woo-comprehensive-monitor'); ?>
+                </label>
+                <p class="description"><?php _e('Automatically backup current version before updating.', 'woo-comprehensive-monitor'); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><?php _e('Check Compatibility', 'woo-comprehensive-monitor'); ?></th>
+            <td>
+                <label>
+                    <input type="checkbox" name="wcm_update_compatibility" value="yes" <?php checked(get_option('wcm_update_compatibility', 'yes'), 'yes'); ?>>
+                    <?php _e('Check compatibility before updating', 'woo-comprehensive-monitor'); ?>
+                </label>
+                <p class="description"><?php _e('Verify PHP, WordPress, and WooCommerce compatibility.', 'woo-comprehensive-monitor'); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><?php _e('Major Updates', 'woo-comprehensive-monitor'); ?></th>
+            <td>
+                <select name="wcm_major_updates">
+                    <option value="auto" <?php selected(get_option('wcm_major_updates', 'auto'), 'auto'); ?>><?php _e('Auto-update (recommended)', 'woo-comprehensive-monitor'); ?></option>
+                    <option value="confirm" <?php selected(get_option('wcm_major_updates', 'auto'), 'confirm'); ?>><?php _e('Show confirmation notice', 'woo-comprehensive-monitor'); ?></option>
+                    <option value="manual" <?php selected(get_option('wcm_major_updates', 'auto'), 'manual'); ?>><?php _e('Manual update only', 'woo-comprehensive-monitor'); ?></option>
+                </select>
+                <p class="description"><?php _e('How to handle major version updates (e.g., 4.x.x → 5.0.0).', 'woo-comprehensive-monitor'); ?></p>
+            </td>
         </tr>
         <tr>
             <th scope="row"><?php _e('Plugin Version', 'woo-comprehensive-monitor'); ?></th>
