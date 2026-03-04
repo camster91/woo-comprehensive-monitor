@@ -3,7 +3,7 @@
  * Plugin Name: WooCommerce Comprehensive Monitor & Dispute Protection
  * Plugin URI: https://ashbi.ca
  * Description: Complete WooCommerce monitoring, error tracking, dispute protection, and health alerts. Combines frontend monitoring, dispute evidence generation, and centralized health reporting.
- * Version: 4.1.0
+ * Version: 4.2.0
  * Author: Ashbi
  * Author URI: https://ashbi.ca
  * License: GPL2
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('WCM_VERSION', '4.1.0');
+define('WCM_VERSION', '4.2.0');
 define('WCM_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WCM_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('WCM_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -41,9 +41,8 @@ require_once WCM_PLUGIN_DIR . 'includes/class-wcm-admin-dashboard.php';
 require_once WCM_PLUGIN_DIR . 'includes/class-wcm-subscription-manager-wps.php';
 require_once WCM_PLUGIN_DIR . 'includes/class-wcm-checkout.php';
 require_once WCM_PLUGIN_DIR . 'includes/class-wcm-evidence-generator.php';
-require_once WCM_PLUGIN_DIR . 'includes/class-wcm-refund-recovery.php';
+require_once WCM_PLUGIN_DIR . 'includes/class-wcm-subscription-protector.php';
 require_once WCM_PLUGIN_DIR . 'includes/class-wcm-preorder.php';
-require_once WCM_PLUGIN_DIR . 'includes/class-wcm-price-diff-charger.php';
 
 /**
  * Main plugin class
@@ -57,9 +56,8 @@ class WooComprehensiveMonitor {
     private $admin_dashboard;
     private $subscription_manager;
     private $checkout;
-    private $refund_recovery;
+    private $subscription_protector;
     private $preorder;
-    private $price_diff_charger;
 
     /**
      * Get singleton instance
@@ -127,9 +125,8 @@ class WooComprehensiveMonitor {
         $this->admin_dashboard = new WCM_Admin_Dashboard();
         $this->subscription_manager = new WCM_Subscription_Manager_WPS();
         $this->checkout = WCM_Checkout::get_instance();
-        $this->refund_recovery = WCM_Refund_Recovery::get_instance();
+        $this->subscription_protector = WCM_Subscription_Protector::get_instance();
         $this->preorder = WCM_PreOrder::get_instance();
-        $this->price_diff_charger = WCM_Price_Diff_Charger::get_instance();
     }
 
     /**
@@ -195,6 +192,7 @@ class WooComprehensiveMonitor {
             regular_total decimal(10,2) NOT NULL DEFAULT 0.00,
             subscription_total decimal(10,2) NOT NULL DEFAULT 0.00,
             charge_status varchar(20) NOT NULL DEFAULT 'pending',
+            charge_type varchar(30) DEFAULT NULL,
             charge_date datetime DEFAULT NULL,
             created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
             notes text DEFAULT NULL,
@@ -282,17 +280,12 @@ class WooComprehensiveMonitor {
             'wcm_store_id' => $this->generate_store_id(),
             'wcm_acknowledgment_text' => 'I acknowledge that I will be charged recurring payments for future subscription renewals. I understand that these charges will continue until I cancel my subscription.',
             'wcm_force_all_products' => '0',
-            // Recovery settings (from Wp-Refund)
-            'wcm_recovery_enabled' => 'yes',
-            'wcm_recovery_minimum_orders' => '2',
-            'wcm_recovery_grace_period' => '0',
-            'wcm_recovery_charge_method' => 'manual',
-            'wcm_recovery_notify_customer' => 'yes',
-            'wcm_recovery_notify_admin' => 'yes',
-            'wcm_recovery_exempt_roles' => array(),
-            // Price diff charger settings (from subscription-price-diff-charger)
-            'wcm_spd_auto_charge_on_cancel' => 'no',
-            'wcm_spd_customer_self_service' => 'yes',
+            // Subscription price protection settings
+            'wcm_sp_auto_charge_on_cancel' => 'yes',
+            'wcm_sp_customer_conversion' => 'yes',
+            'wcm_sp_charge_method' => 'automatic',
+            'wcm_sp_notify_customer' => 'yes',
+            'wcm_sp_notify_admin' => 'yes',
             'wcm_auto_connected' => '1',
             'wcm_connection_time' => current_time('mysql'),
             'wcm_plugin_version' => WCM_VERSION,

@@ -42,7 +42,7 @@ class WCM_Admin_Dashboard {
         add_submenu_page( 'woo-comprehensive-monitor', __( 'Error Logs', 'woo-comprehensive-monitor' ), __( 'Error Logs', 'woo-comprehensive-monitor' ), 'manage_woocommerce', 'wcm-error-logs', array( $this, 'render_error_logs_page' ) );
         add_submenu_page( 'woo-comprehensive-monitor', __( 'Disputes', 'woo-comprehensive-monitor' ), __( 'Disputes', 'woo-comprehensive-monitor' ), 'manage_woocommerce', 'wcm-disputes', array( $this, 'render_disputes_page' ) );
         add_submenu_page( 'woo-comprehensive-monitor', __( 'Acknowledgments', 'woo-comprehensive-monitor' ), __( 'Acknowledgments', 'woo-comprehensive-monitor' ), 'manage_woocommerce', 'wcm-acknowledgments', array( $this, 'render_acknowledgments_page' ) );
-        add_submenu_page( 'woo-comprehensive-monitor', __( 'Recovery Log', 'woo-comprehensive-monitor' ), __( 'Recovery Log', 'woo-comprehensive-monitor' ), 'manage_woocommerce', 'wcm-recovery', array( $this, 'render_recovery_page' ) );
+        add_submenu_page( 'woo-comprehensive-monitor', __( 'Price Protection', 'woo-comprehensive-monitor' ), __( 'Price Protection', 'woo-comprehensive-monitor' ), 'manage_woocommerce', 'wcm-recovery', array( $this, 'render_recovery_page' ) );
         add_submenu_page( 'woo-comprehensive-monitor', __( 'Pre-Orders', 'woo-comprehensive-monitor' ), __( 'Pre-Orders', 'woo-comprehensive-monitor' ), 'manage_woocommerce', 'wcm-preorders', array( $this, 'render_preorders_page' ) );
         add_submenu_page( 'woo-comprehensive-monitor', __( 'Health Checks', 'woo-comprehensive-monitor' ), __( 'Health Checks', 'woo-comprehensive-monitor' ), 'manage_woocommerce', 'wcm-health', array( $this, 'render_health_page' ) );
         add_submenu_page( 'woo-comprehensive-monitor', __( 'Settings', 'woo-comprehensive-monitor' ), __( 'Settings', 'woo-comprehensive-monitor' ), 'manage_woocommerce', 'woo-comprehensive-monitor-settings', 'wcm_render_settings_page' );
@@ -76,14 +76,11 @@ class WCM_Admin_Dashboard {
         $ack_table     = $wpdb->prefix . 'woo_subscription_acknowledgments';
         $ack_count     = $wpdb->get_var( $wpdb->prepare( "SHOW TABLES LIKE %s", $ack_table ) ) ? $wpdb->get_var( "SELECT COUNT(*) FROM {$ack_table}" ) : 0;
 
-        // Recovery stats
-        $recovery = WCM_Refund_Recovery::get_instance()->get_recovery_stats();
+        // Subscription protection stats
+        $protection = WCM_Subscription_Protector::get_instance()->get_stats();
 
         // Pre-order stats
         $preorder = WCM_PreOrder::get_instance()->get_preorder_stats();
-
-        // Price diff stats
-        $pricediff = WCM_Price_Diff_Charger::get_instance()->get_stats();
         ?>
         <div class="wrap wcm-admin">
             <h1><?php esc_html_e( 'WooCommerce Monitor Dashboard', 'woo-comprehensive-monitor' ); ?></h1>
@@ -108,16 +105,12 @@ class WCM_Admin_Dashboard {
                     <p class="wcm-stat-number"><?php echo esc_html( $ack_count ); ?></p>
                 </div>
                 <div class="wcm-stat-card">
-                    <h3><?php esc_html_e( 'Recovered', 'woo-comprehensive-monitor' ); ?></h3>
-                    <p class="wcm-stat-number" style="font-size:24px;"><?php echo wc_price( $recovery['total_recovered'] ); ?></p>
+                    <h3><?php esc_html_e( 'Price Protected', 'woo-comprehensive-monitor' ); ?></h3>
+                    <p class="wcm-stat-number" style="font-size:24px;"><?php echo wc_price( $protection['total_amount'] ); ?></p>
                 </div>
                 <div class="wcm-stat-card">
                     <h3><?php esc_html_e( 'Pre-Orders', 'woo-comprehensive-monitor' ); ?></h3>
                     <p class="wcm-stat-number"><?php echo esc_html( $preorder['pre_ordered'] ); ?></p>
-                </div>
-                <div class="wcm-stat-card">
-                    <h3><?php esc_html_e( 'Price Diffs', 'woo-comprehensive-monitor' ); ?></h3>
-                    <p class="wcm-stat-number"><?php echo esc_html( $pricediff['total'] ); ?></p>
                 </div>
             </div>
 
@@ -388,29 +381,30 @@ class WCM_Admin_Dashboard {
     // RECOVERY LOG PAGE
     // ==========================================
     public function render_recovery_page() {
-        $recovery = WCM_Refund_Recovery::get_instance();
-        $stats    = $recovery->get_recovery_stats();
-        $page     = isset( $_GET['paged'] ) ? max( 1, absint( $_GET['paged'] ) ) : 1;
-        $logs     = $recovery->get_recovery_log( 25, $page );
+        $protector = WCM_Subscription_Protector::get_instance();
+        $stats     = $protector->get_stats();
         ?>
         <div class="wrap wcm-admin">
-            <h1><?php esc_html_e( 'Subscription Discount Recovery', 'woo-comprehensive-monitor' ); ?></h1>
+            <h1><?php esc_html_e( 'Subscription Price Protection', 'woo-comprehensive-monitor' ); ?></h1>
 
             <div class="wcm-dashboard-stats">
-                <div class="wcm-stat-card"><h3><?php esc_html_e( 'Total Charges', 'woo-comprehensive-monitor' ); ?></h3><p class="wcm-stat-number"><?php echo esc_html( $stats['total'] ); ?></p></div>
+                <div class="wcm-stat-card"><h3><?php esc_html_e( 'Total', 'woo-comprehensive-monitor' ); ?></h3><p class="wcm-stat-number"><?php echo esc_html( $stats['total'] ); ?></p></div>
                 <div class="wcm-stat-card"><h3><?php esc_html_e( 'Charged', 'woo-comprehensive-monitor' ); ?></h3><p class="wcm-stat-number" style="color:#4CAF50;"><?php echo esc_html( $stats['charged'] ); ?></p></div>
                 <div class="wcm-stat-card"><h3><?php esc_html_e( 'Pending', 'woo-comprehensive-monitor' ); ?></h3><p class="wcm-stat-number" style="color:#FF9800;"><?php echo esc_html( $stats['pending'] ); ?></p></div>
-                <div class="wcm-stat-card"><h3><?php esc_html_e( 'Failed', 'woo-comprehensive-monitor' ); ?></h3><p class="wcm-stat-number" style="color:#F44336;"><?php echo esc_html( $stats['failed'] ); ?></p></div>
-                <div class="wcm-stat-card"><h3><?php esc_html_e( 'Total Recovered', 'woo-comprehensive-monitor' ); ?></h3><p class="wcm-stat-number" style="color:#4CAF50;font-size:24px;"><?php echo wc_price( $stats['total_recovered'] ); ?></p></div>
+                <div class="wcm-stat-card"><h3><?php esc_html_e( 'Protected Revenue', 'woo-comprehensive-monitor' ); ?></h3><p class="wcm-stat-number" style="color:#4CAF50;font-size:24px;"><?php echo wc_price( $stats['total_amount'] ); ?></p></div>
             </div>
 
             <div class="wcm-info-box">
                 <h3><?php esc_html_e( 'How It Works', 'woo-comprehensive-monitor' ); ?></h3>
-                <p><?php printf( esc_html__( 'When a customer cancels a subscription before completing %d orders, the discount difference between the regular price and what they paid is automatically charged. Configure in Settings.', 'woo-comprehensive-monitor' ), WCM_Refund_Recovery::get_minimum_orders() ); ?></p>
-                <p><strong><?php esc_html_e( 'Grace Period:', 'woo-comprehensive-monitor' ); ?></strong> <?php echo esc_html( WCM_Refund_Recovery::get_grace_period_days() ); ?> <?php esc_html_e( 'days', 'woo-comprehensive-monitor' ); ?> |
-                <strong><?php esc_html_e( 'Charge Method:', 'woo-comprehensive-monitor' ); ?></strong> <?php echo esc_html( ucfirst( WCM_Refund_Recovery::get_charge_method() ) ); ?></p>
+                <p><?php esc_html_e( 'When a customer cancels their subscription or converts to a one-time purchase, the system finds the correct one-time product price and charges the difference. This prevents customers from subscribing just to get a discount.', 'woo-comprehensive-monitor' ); ?></p>
+                <p><?php esc_html_e( 'Set the one-time price on your products under Product → Pricing → "One-Time Price". If not set, the system auto-detects from sibling variations or the regular price.', 'woo-comprehensive-monitor' ); ?></p>
             </div>
 
+            <?php
+            global $wpdb;
+            $log_table = $wpdb->prefix . 'wcm_recovery_log';
+            $logs = $wpdb->get_results( "SELECT * FROM {$log_table} ORDER BY created_at DESC LIMIT 50" );
+            ?>
             <?php if ( ! empty( $logs ) ) : ?>
             <table class="wp-list-table widefat fixed striped">
                 <thead>
@@ -418,9 +412,10 @@ class WCM_Admin_Dashboard {
                         <th><?php esc_html_e( 'Date', 'woo-comprehensive-monitor' ); ?></th>
                         <th><?php esc_html_e( 'Subscription', 'woo-comprehensive-monitor' ); ?></th>
                         <th><?php esc_html_e( 'Customer', 'woo-comprehensive-monitor' ); ?></th>
-                        <th><?php esc_html_e( 'Regular Total', 'woo-comprehensive-monitor' ); ?></th>
+                        <th><?php esc_html_e( 'One-Time Price', 'woo-comprehensive-monitor' ); ?></th>
                         <th><?php esc_html_e( 'Paid', 'woo-comprehensive-monitor' ); ?></th>
-                        <th><?php esc_html_e( 'Recovery', 'woo-comprehensive-monitor' ); ?></th>
+                        <th><?php esc_html_e( 'Difference', 'woo-comprehensive-monitor' ); ?></th>
+                        <th><?php esc_html_e( 'Trigger', 'woo-comprehensive-monitor' ); ?></th>
                         <th><?php esc_html_e( 'Status', 'woo-comprehensive-monitor' ); ?></th>
                         <th><?php esc_html_e( 'Order', 'woo-comprehensive-monitor' ); ?></th>
                     </tr>
@@ -428,6 +423,8 @@ class WCM_Admin_Dashboard {
                 <tbody>
                     <?php foreach ( $logs as $log ) :
                         $customer = get_userdata( $log->customer_id );
+                        $trigger_labels = array( 'cancel_auto' => '🔄 Auto', 'convert_customer' => '🧑 Customer', 'admin_manual' => '👤 Admin' );
+                        $trigger_label = $trigger_labels[ $log->charge_type ?? '' ] ?? esc_html( $log->notes );
                     ?>
                     <tr>
                         <td><?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $log->created_at ) ) ); ?></td>
@@ -436,6 +433,7 @@ class WCM_Admin_Dashboard {
                         <td><?php echo wc_price( $log->regular_total ); ?></td>
                         <td><?php echo wc_price( $log->subscription_total ); ?></td>
                         <td><strong><?php echo wc_price( $log->discount_amount ); ?></strong></td>
+                        <td><?php echo $trigger_label; ?></td>
                         <td>
                             <?php
                             $colors = array( 'charged' => '#4CAF50', 'pending' => '#FF9800', 'failed' => '#F44336' );
@@ -453,7 +451,7 @@ class WCM_Admin_Dashboard {
                 </tbody>
             </table>
             <?php else : ?>
-            <p><?php esc_html_e( 'No recovery charges yet. When customers cancel subscriptions early, recovery charges will appear here.', 'woo-comprehensive-monitor' ); ?></p>
+            <p><?php esc_html_e( 'No price adjustments yet. When customers cancel or convert subscriptions, charges will appear here.', 'woo-comprehensive-monitor' ); ?></p>
             <?php endif; ?>
         </div>
         <?php
