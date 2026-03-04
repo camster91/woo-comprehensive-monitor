@@ -79,11 +79,15 @@ class WCM_Subscription_Protector {
     /**
      * Find what the one-time price should be for a subscription product.
      *
-     * Priority:
-     * 1. Custom meta _wcm_onetime_price (admin override on product)
-     * 2. Sibling non-subscription variation of the same parent
-     * 3. Product regular_price
-     * 4. Product price
+     * Uses REAL product data only — no guessing.
+     *
+     * Sources (checked in order):
+     * 1. _wcm_onetime_price meta on the product/variation (explicit admin setting)
+     * 2. _wcm_onetime_price meta on the parent product
+     * 3. _wcm_onetime_product_id meta — linked one-time product, use its price
+     * 4. _wcm_onetime_product_id meta on the parent
+     *
+     * Returns 0 if no one-time price is configured (charge will be skipped).
      */
     public function get_onetime_price( $product ) {
         if ( ! $product instanceof WC_Product ) {
@@ -93,13 +97,22 @@ class WCM_Subscription_Protector {
             return 0;
         }
 
-        // 1. Explicit admin override
+        // 1. Explicit price on this product/variation
         $override = $product->get_meta( '_wcm_onetime_price' );
         if ( '' !== $override && false !== $override ) {
             return (float) $override;
         }
 
-        // 2. Check parent for override
+        // 2. Linked one-time product on this product/variation
+        $linked_id = $product->get_meta( '_wcm_onetime_product_id' );
+        if ( $linked_id ) {
+            $linked = wc_get_product( (int) $linked_id );
+            if ( $linked ) {
+                return (float) $linked->get_price();
+            }
+        }
+
+        // 3. Check parent product for override
         $parent_id = $product->get_parent_id();
         if ( $parent_id ) {
             $parent = wc_get_product( $parent_id );
@@ -108,57 +121,19 @@ class WCM_Subscription_Protector {
                 if ( '' !== $parent_override && false !== $parent_override ) {
                     return (float) $parent_override;
                 }
-            }
-        }
 
-        // 3. Find sibling non-subscription variation
-        if ( $parent_id && $product->is_type( 'subscription_variation' ) ) {
-            $sibling_price = $this->find_sibling_onetime_price( $product );
-            if ( $sibling_price > 0 ) {
-                return $sibling_price;
-            }
-        }
-
-        // 4. Regular price (often the "full" price before subscription discount)
-        $regular = (float) $product->get_regular_price();
-        if ( $regular > 0 ) {
-            return $regular;
-        }
-
-        // 5. Current price as last resort
-        return (float) $product->get_price();
-    }
-
-    /**
-     * Look at sibling variations of the same parent to find a non-subscription
-     * variation and use its price. This handles the case where:
-     * - Variation A: "Subscribe & Save" $8/mo (subscription_variation)
-     * - Variation B: "One-Time Purchase" $12 (product_variation)
-     */
-    private function find_sibling_onetime_price( $subscription_variation ) {
-        $parent = wc_get_product( $subscription_variation->get_parent_id() );
-        if ( ! $parent || ! $parent->is_type( 'variable' ) ) {
-            return 0;
-        }
-
-        $children = $parent->get_children();
-        foreach ( $children as $child_id ) {
-            if ( $child_id === $subscription_variation->get_id() ) {
-                continue;
-            }
-            $sibling = wc_get_product( $child_id );
-            if ( ! $sibling ) {
-                continue;
-            }
-            // If this sibling is NOT a subscription variation, it's the one-time version
-            if ( ! $sibling->is_type( 'subscription_variation' ) ) {
-                $price = (float) $sibling->get_price();
-                if ( $price > 0 ) {
-                    return $price;
+                // 4. Linked one-time product on parent
+                $parent_linked = $parent->get_meta( '_wcm_onetime_product_id' );
+                if ( $parent_linked ) {
+                    $linked = wc_get_product( (int) $parent_linked );
+                    if ( $linked ) {
+                        return (float) $linked->get_price();
+                    }
                 }
             }
         }
 
+        // No one-time price configured — return 0, charge will be skipped
         return 0;
     }
 
@@ -798,6 +773,7 @@ class WCM_Subscription_Protector {
             }
         } elseif ( ! $calc ) {
             echo '<p>' . esc_html__( 'No price difference found.', 'woo-comprehensive-monitor' ) . '</p>';
+            echo '<p class="description">' . esc_html__( 'Set a "One-Time Price" or link a one-time product on each subscription item\'s product page.', 'woo-comprehensive-monitor' ) . '</p>';
         } else {
             ?>
             <table style="width:100%;margin-bottom:10px;font-size:13px;">
@@ -855,25 +831,70 @@ class WCM_Subscription_Protector {
     // ================================================================
 
     public function add_product_field() {
+        global $post;
+
+        echo '<div class="options_group wcm-price-protection-fields">';
+        echo '<p class="form-field"><strong style="display:block;margin-bottom:5px;">' . esc_html__( '🛡️ Price Protection', 'woo-comprehensive-monitor' ) . '</strong></p>';
+
         woocommerce_wp_text_input( array(
             'id'          => '_wcm_onetime_price',
-            'label'       => __( 'One-Time Price (for price protection)', 'woo-comprehensive-monitor' ),
+            'label'       => __( 'One-Time Price', 'woo-comprehensive-monitor' ),
             'type'        => 'text',
             'data_type'   => 'price',
             'desc_tip'    => true,
-            'description' => __( 'If this is a subscription product, enter the equivalent one-time purchase price. Used to calculate the difference when a customer converts. Leave blank to auto-detect from variations or regular price.', 'woo-comprehensive-monitor' ),
+            'description' => __( 'The equivalent one-time purchase price. When a subscriber cancels or converts, they are charged the difference between this and what they paid. Leave blank and use linked product instead if preferred.', 'woo-comprehensive-monitor' ),
         ) );
+
+        // Product search field for linking to one-time equivalent
+        ?>
+        <p class="form-field _wcm_onetime_product_id_field">
+            <label for="_wcm_onetime_product_id"><?php esc_html_e( 'Linked One-Time Product', 'woo-comprehensive-monitor' ); ?></label>
+            <select class="wc-product-search" style="width:50%;"
+                    id="_wcm_onetime_product_id"
+                    name="_wcm_onetime_product_id"
+                    data-placeholder="<?php esc_attr_e( 'Search for a product…', 'woo-comprehensive-monitor' ); ?>"
+                    data-action="woocommerce_json_search_products"
+                    data-exclude="<?php echo esc_attr( $post->ID ); ?>">
+                <?php
+                $linked_id = get_post_meta( $post->ID, '_wcm_onetime_product_id', true );
+                if ( $linked_id ) {
+                    $linked = wc_get_product( $linked_id );
+                    if ( $linked ) {
+                        printf( '<option value="%d" selected>%s (#%d — %s)</option>',
+                            esc_attr( $linked_id ),
+                            esc_html( $linked->get_name() ),
+                            $linked_id,
+                            wp_strip_all_tags( wc_price( $linked->get_price() ) )
+                        );
+                    }
+                }
+                ?>
+            </select>
+            <?php echo wc_help_tip( __( 'Link this subscription product to its one-time equivalent. The linked product\'s price is used when calculating the difference. Takes priority over "One-Time Price" if both are set — actually no, "One-Time Price" takes priority.', 'woo-comprehensive-monitor' ) ); ?>
+        </p>
+        <?php
+        echo '</div>';
     }
 
     public function save_product_field( $post_id ) {
-        if ( isset( $_POST['_wcm_onetime_price'] ) ) {
-            $product = wc_get_product( $post_id );
-            if ( $product ) {
-                $val = '' === $_POST['_wcm_onetime_price'] ? '' : wc_format_decimal( sanitize_text_field( $_POST['_wcm_onetime_price'] ) );
-                $product->update_meta_data( '_wcm_onetime_price', $val );
-                $product->save();
-            }
+        $product = wc_get_product( $post_id );
+        if ( ! $product ) {
+            return;
         }
+
+        // One-time price
+        if ( isset( $_POST['_wcm_onetime_price'] ) ) {
+            $val = '' === $_POST['_wcm_onetime_price'] ? '' : wc_format_decimal( sanitize_text_field( $_POST['_wcm_onetime_price'] ) );
+            $product->update_meta_data( '_wcm_onetime_price', $val );
+        }
+
+        // Linked product
+        if ( isset( $_POST['_wcm_onetime_product_id'] ) ) {
+            $linked = absint( $_POST['_wcm_onetime_product_id'] );
+            $product->update_meta_data( '_wcm_onetime_product_id', $linked ? $linked : '' );
+        }
+
+        $product->save();
     }
 
     public function add_variation_field( $loop, $variation_data, $variation ) {
@@ -884,7 +905,7 @@ class WCM_Subscription_Protector {
             'type'        => 'text',
             'data_type'   => 'price',
             'desc_tip'    => true,
-            'description' => __( 'Equivalent one-time price for this variation.', 'woo-comprehensive-monitor' ),
+            'description' => __( 'The one-time purchase price for this variation. If blank, checks parent product settings.', 'woo-comprehensive-monitor' ),
             'value'       => get_post_meta( $variation->ID, '_wcm_onetime_price', true ),
             'wrapper_class' => 'form-row form-row-first',
         ) );

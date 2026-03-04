@@ -557,15 +557,23 @@ function wcm_render_protection_settings() {
     <h3><?php _e('Setting the One-Time Price', 'woo-comprehensive-monitor'); ?></h3>
     <table class="form-table">
         <tr>
-            <th scope="row"><?php _e('How price detection works', 'woo-comprehensive-monitor'); ?></th>
+            <th scope="row"><?php _e('Setup (required)', 'woo-comprehensive-monitor'); ?></th>
             <td>
-                <p><?php _e('The system finds the correct one-time price in this order:', 'woo-comprehensive-monitor'); ?></p>
+                <p><strong><?php _e('You must configure the one-time price on each subscription product. There is no guessing.', 'woo-comprehensive-monitor'); ?></strong></p>
+                <p><?php _e('Go to the product editor and under Pricing, you\'ll see two fields:', 'woo-comprehensive-monitor'); ?></p>
                 <ol style="margin:0 0 10px;padding-left:20px;">
-                    <li><strong><?php _e('"One-Time Price" field', 'woo-comprehensive-monitor'); ?></strong> — <?php _e('Set on the product/variation under Pricing. This always wins.', 'woo-comprehensive-monitor'); ?></li>
-                    <li><strong><?php _e('Sibling variation', 'woo-comprehensive-monitor'); ?></strong> — <?php _e('If the subscription is a variation, looks for a non-subscription sibling variation and uses its price.', 'woo-comprehensive-monitor'); ?></li>
-                    <li><strong><?php _e('Regular price', 'woo-comprehensive-monitor'); ?></strong> — <?php _e('Falls back to the product\'s regular price.', 'woo-comprehensive-monitor'); ?></li>
+                    <li><strong><?php _e('One-Time Price', 'woo-comprehensive-monitor'); ?></strong> — <?php _e('Enter the price directly (e.g. $12). Quickest option.', 'woo-comprehensive-monitor'); ?></li>
+                    <li><strong><?php _e('Linked One-Time Product', 'woo-comprehensive-monitor'); ?></strong> — <?php _e('Search and select the actual one-time product. The system reads its real price. Best if you have a separate one-time product in your store.', 'woo-comprehensive-monitor'); ?></li>
                 </ol>
-                <p class="description"><?php _e('Example: Product has "Subscribe & Save" variation at $8/mo and "One-Time" variation at $12. When customer converts, they pay $4 difference.', 'woo-comprehensive-monitor'); ?></p>
+                <p class="description"><?php _e('If neither is set, the product is skipped — no charge is created. This is intentional: we only charge when you\'ve explicitly defined the one-time price.', 'woo-comprehensive-monitor'); ?></p>
+
+                <div style="margin-top:12px;padding:12px;background:#f0f6fc;border-left:4px solid #2271b1;">
+                    <strong><?php _e('Example:', 'woo-comprehensive-monitor'); ?></strong><br>
+                    <?php _e('Subscription product "Coffee Subscribe & Save" — $8/mo', 'woo-comprehensive-monitor'); ?><br>
+                    <?php _e('One-time product "Coffee" — $12', 'woo-comprehensive-monitor'); ?><br>
+                    <?php _e('→ Set One-Time Price to $12, OR link to the "Coffee" product', 'woo-comprehensive-monitor'); ?><br>
+                    <?php _e('→ When customer cancels, they\'re charged $12 - $8 = $4', 'woo-comprehensive-monitor'); ?>
+                </div>
             </td>
         </tr>
         <tr>
