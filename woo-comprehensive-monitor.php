@@ -3,7 +3,7 @@
  * Plugin Name: WooCommerce Comprehensive Monitor & Dispute Protection
  * Plugin URI: https://ashbi.ca
  * Description: Complete WooCommerce monitoring, error tracking, dispute protection, and health alerts. Combines frontend monitoring, dispute evidence generation, and centralized health reporting.
- * Version: 4.4.1
+ * Version: 4.4.2
  * Author: Ashbi
  * Author URI: https://ashbi.ca
  * License: GPL2
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('WCM_VERSION', '4.4.1');
+define('WCM_VERSION', '4.4.2');
 define('WCM_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WCM_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('WCM_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -126,10 +126,9 @@ class WooComprehensiveMonitor {
                 return;
             }
 
-            // Check if Stripe is active
-            if (!class_exists('WC_Stripe')) {
-                add_action('admin_notices', array($this, 'stripe_missing_notice'));
-            }
+            // Check if Stripe is active - use multiple checks for compatibility
+            // We'll check at admin_init time when WC is fully loaded
+            add_action('admin_init', array($this, 'check_stripe_status'));
 
             // Initialize components with error handling
             WCM_Helpers::get_instance();
@@ -604,6 +603,17 @@ class WooComprehensiveMonitor {
     }
 
     /**
+     * Stripe disabled notice (plugin active but gateway disabled)
+     */
+    public function stripe_disabled_notice() {
+        ?>
+        <div class="notice notice-warning">
+            <p><?php _e('WooCommerce Comprehensive Monitor: Stripe Gateway is installed but <strong>disabled</strong> in WooCommerce settings. Please enable it at WooCommerce → Settings → Payments → Stripe for full dispute protection features.', 'woo-comprehensive-monitor'); ?></p>
+        </div>
+        <?php
+    }
+
+    /**
      * Get dispute manager instance
      */
     public function get_dispute_manager() {
@@ -636,6 +646,34 @@ class WooComprehensiveMonitor {
      */
     public function get_subscription_manager() {
         return $this->subscription_manager;
+    }
+
+    /**
+     * Check Stripe status and show appropriate notices
+     */
+    public function check_stripe_status() {
+        // Check for Stripe plugin classes (different versions)
+        $stripe_active = false;
+        $stripe_gateway_enabled = false;
+        
+        if (class_exists('WC_Stripe') || class_exists('WC_Stripe_API') || class_exists('WooCommerce\\Stripe\\Gateway')) {
+            $stripe_active = true;
+            
+            // Check if Stripe gateway is enabled in WooCommerce settings
+            if (function_exists('WC') && method_exists(WC(), 'payment_gateways')) {
+                $gateways = WC()->payment_gateways()->payment_gateways();
+                if (isset($gateways['stripe']) && $gateways['stripe']->enabled === 'yes') {
+                    $stripe_gateway_enabled = true;
+                }
+            }
+        }
+        
+        // Show appropriate notice
+        if (!$stripe_active) {
+            add_action('admin_notices', array($this, 'stripe_missing_notice'));
+        } else if (!$stripe_gateway_enabled) {
+            add_action('admin_notices', array($this, 'stripe_disabled_notice'));
+        }
     }
 }
 
