@@ -3,7 +3,7 @@
  * Plugin Name: WooCommerce Comprehensive Monitor & Dispute Protection
  * Plugin URI: https://ashbi.ca
  * Description: Complete WooCommerce monitoring, error tracking, dispute protection, and health alerts. Combines frontend monitoring, dispute evidence generation, and centralized health reporting.
- * Version: 4.5.0
+ * Version: 4.5.1
  * Author: Ashbi
  * Author URI: https://ashbi.ca
  * License: GPL2
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('WCM_VERSION', '4.5.0');
+define('WCM_VERSION', '4.5.1');
 define('WCM_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WCM_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('WCM_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -86,16 +86,13 @@ class WooComprehensiveMonitor {
         register_activation_hook(__FILE__, array($this, 'activate'));
         register_deactivation_hook(__FILE__, array($this, 'deactivate'));
 
-        // Initialize auto-updater early (hooks need to run before plugins_loaded)
-        $this->auto_updater = new WCM_Auto_Updater();
-
         // Show welcome notice after activation
         add_action('admin_notices', array($this, 'show_activation_notice'));
         
         // Show activation errors if any
         add_action('admin_notices', array($this, 'show_activation_errors'));
 
-        // Initialize components
+        // Initialize components (includes auto-updater)
         add_action('plugins_loaded', array($this, 'init_components'));
 
         // Load text domain
@@ -164,6 +161,9 @@ class WooComprehensiveMonitor {
             $this->checkout = WCM_Checkout::get_instance();
             $this->subscription_protector = WCM_Subscription_Protector::get_instance();
             $this->preorder = WCM_PreOrder::get_instance();
+            
+            // Initialize auto-updater (moved from constructor to avoid early errors)
+            $this->auto_updater = new WCM_Auto_Updater();
             
         } catch (Exception $e) {
             // Log error but don't crash
@@ -354,56 +354,14 @@ class WooComprehensiveMonitor {
      * Plugin activation with auto-connect (ULTRA-MINIMAL for seamless updates)
      */
     public function activate() {
-        // Ultra-minimal activation that can't fail
-        // All real work happens in init_components() which has proper error handling
+        // ULTRA-MINIMAL activation - just set version, nothing else
+        // Absolutely cannot fail - all other initialization happens in init_components()
         
-        try {
-            // Just ensure version is set and basic crons are scheduled
-            // Don't create tables here - that happens in ensure_tables_exist()
-            // Don't send activation notice here - that happens in init_components if needed
-            
-            // Check if this is an update vs fresh install
-            $is_update = get_option('wcm_plugin_version', '0') !== '0';
-            
-            // Minimal configuration for activation only
-            if (!$is_update) {
-                // Fresh install: set absolute minimum
-                if (!get_option('wcm_monitoring_server')) {
-                    add_option('wcm_monitoring_server', 'https://woo.ashbi.ca/api/track-woo-error');
-                }
-                if (!get_option('wcm_alert_email')) {
-                    add_option('wcm_alert_email', 'cameron@ashbi.ca');
-                }
-                if (!get_option('wcm_store_id')) {
-                    add_option('wcm_store_id', $this->generate_store_id());
-                }
-            }
-            
-            // Always update version
-            update_option('wcm_plugin_version', WCM_VERSION);
-            
-            // Schedule basic cron jobs if not already scheduled
-            if (!wp_next_scheduled('wcm_daily_health_check')) {
-                wp_schedule_event(time(), 'hourly', 'wcm_daily_health_check');
-            }
-            if (!wp_next_scheduled('wcm_hourly_dispute_check')) {
-                wp_schedule_event(time(), 'hourly', 'wcm_hourly_dispute_check');
-            }
-            if (!wp_next_scheduled('wcm_daily_log_cleanup')) {
-                wp_schedule_event(time(), 'daily', 'wcm_daily_log_cleanup');
-            }
-            
-            // Flush rewrite rules
-            flush_rewrite_rules();
-            
-        } catch (Exception $e) {
-            // If even this minimal activation fails, log it but don't prevent activation
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('[WCM] Minimal activation error (non-fatal): ' . $e->getMessage());
-            }
-            // Still update version so plugin can activate
-            update_option('wcm_plugin_version', WCM_VERSION);
-        }
+        // Set version immediately with no conditions
+        update_option('wcm_plugin_version', WCM_VERSION);
+        
+        // That's it! No cron jobs, no options, no flush_rewrite_rules
+        // All other initialization happens in init_components() which has try-catch
     }
 
     /**
