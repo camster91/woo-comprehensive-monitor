@@ -73,6 +73,20 @@ const apiKeyMiddleware = (req, res, next) => {
     return next();
   }
   
+  // Check if request has valid auth token (from dashboard)
+  const authToken = req.headers['x-auth-token'] || req.query.authToken;
+  if (authToken && authTokens[authToken]) {
+    const authData = authTokens[authToken];
+    if (authData.expires >= Date.now()) {
+      // Valid auth token, allow request
+      req.user = authData.email;
+      return next();
+    } else {
+      // Expired token, clean up
+      delete authTokens[authToken];
+    }
+  }
+  
   // Check API key for all other non-GET requests
   const apiKey = req.headers['x-api-key'] || req.query.apiKey;
   const validApiKey = process.env.API_KEY;
@@ -114,16 +128,17 @@ const authMiddleware = (req, res, next) => {
     return next();
   }
   
+  // Allow error tracking endpoint without auth (plugin reports)
+  if (req.path === '/api/track-woo-error') {
+    return next();
+  }
+  
   // Check for valid token (from header or query parameter)
   const token = req.headers['x-auth-token'] || req.query.authToken;
   
   if (!token || !authTokens[token]) {
-    // For API endpoints, return 401
-    if (req.path.startsWith('/api/')) {
-      return res.status(401).json({ error: 'Authentication required', loginUrl: '/dashboard' });
-    }
-    // For HTML pages, redirect to login
-    // We'll handle this in the dashboard route itself
+    // No valid token, but apiKeyMiddleware may have allowed with API key
+    // For dashboard HTML route, we'll handle in the route itself
     return next();
   }
   
@@ -131,9 +146,6 @@ const authMiddleware = (req, res, next) => {
   const authData = authTokens[token];
   if (authData.expires < Date.now()) {
     delete authTokens[token];
-    if (req.path.startsWith('/api/')) {
-      return res.status(401).json({ error: 'Token expired', loginUrl: '/dashboard' });
-    }
     return next();
   }
   
