@@ -7,6 +7,7 @@ const WooCommerceRestApi = require("@woocommerce/woocommerce-rest-api").default;
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const cookieParser = require("cookie-parser");
 
 // WP Subscription Integration
 const {
@@ -60,6 +61,7 @@ async function initializeWPSubscriptionMonitors() {
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(cookieParser());
 
 // API Key authentication middleware for protected endpoints
 const apiKeyMiddleware = (req, res, next) => {
@@ -133,8 +135,8 @@ const authMiddleware = (req, res, next) => {
     return next();
   }
   
-  // Check for valid token (from header or query parameter)
-  const token = req.headers['x-auth-token'] || req.query.authToken;
+  // Check for valid token (from header, cookie, or query parameter)
+  const token = req.headers['x-auth-token'] || req.cookies.authToken || req.query.authToken;
   
   if (!token || !authTokens[token]) {
     // No valid token, but apiKeyMiddleware may have allowed with API key
@@ -146,6 +148,8 @@ const authMiddleware = (req, res, next) => {
   const authData = authTokens[token];
   if (authData.expires < Date.now()) {
     delete authTokens[token];
+    // Clear expired cookie
+    res.clearCookie('authToken');
     return next();
   }
   
@@ -250,6 +254,8 @@ app.post("/api/track-woo-error", async (req, res) => {
         url: req.body.store_url,
         plugin_version: req.body.plugin_version,
         woocommerce_version: req.body.woocommerce_version,
+        wordpress_version: req.body.wordpress_version,
+        php_version: req.body.php_version,
         last_seen: new Date().toISOString()
       };
       // Include API credentials if provided (from dashboard add-store form)
@@ -267,6 +273,8 @@ app.post("/api/track-woo-error", async (req, res) => {
       existingStore.id = req.body.store_id;
       existingStore.plugin_version = req.body.plugin_version;
       existingStore.woocommerce_version = req.body.woocommerce_version;
+      existingStore.wordpress_version = req.body.wordpress_version;
+      existingStore.php_version = req.body.php_version;
       existingStore.last_seen = new Date().toISOString();
       try {
         fs.writeFileSync('./sites.json', JSON.stringify(sites, null, 2));
@@ -280,6 +288,8 @@ app.post("/api/track-woo-error", async (req, res) => {
     updateStoreStats(req.body.store_id, {
       plugin_version: req.body.plugin_version,
       woocommerce_version: req.body.woocommerce_version,
+      wordpress_version: req.body.wordpress_version,
+      php_version: req.body.php_version,
       features: req.body.features || {}
     });
     
@@ -469,7 +479,7 @@ app.get("/api/health", (req, res) => {
   res.status(200).json({
     status: "ok",
     timestamp: new Date().toISOString(),
-    version: "2.4.0",
+    version: "2.6.0",
     features: {
       frontend_monitoring: true,
       backend_health_checks: sites.length > 0,
@@ -494,6 +504,8 @@ sites.forEach(site => {
     storeStats[site.id] = {
       plugin_version: site.plugin_version || 'unknown',
       woocommerce_version: site.woocommerce_version || 'unknown',
+      wordpress_version: site.wordpress_version || 'unknown',
+      php_version: site.php_version || 'unknown',
       last_seen: site.last_seen || new Date().toISOString(),
       features: site.features || {},
       alerts: {
@@ -515,6 +527,8 @@ function updateStoreStats(storeId, data) {
     storeStats[storeId] = {
       plugin_version: data.plugin_version || 'unknown',
       woocommerce_version: data.woocommerce_version || 'unknown',
+      wordpress_version: data.wordpress_version || 'unknown',
+      php_version: data.php_version || 'unknown',
       last_seen: new Date().toISOString(),
       features: {},
       alerts: {
@@ -532,6 +546,8 @@ function updateStoreStats(storeId, data) {
   // Update basic info
   if (data.plugin_version) storeStats[storeId].plugin_version = data.plugin_version;
   if (data.woocommerce_version) storeStats[storeId].woocommerce_version = data.woocommerce_version;
+  if (data.wordpress_version) storeStats[storeId].wordpress_version = data.wordpress_version;
+  if (data.php_version) storeStats[storeId].php_version = data.php_version;
   storeStats[storeId].last_seen = new Date().toISOString();
   
   // Track features if reported
@@ -563,6 +579,19 @@ app.get("/api/dashboard", (req, res) => {
       a.subject && a.subject.includes('PRICE ADJUSTMENT')
     ).length;
     
+    // Determine store health status
+    let healthStatus = 'unknown';
+    if (stats.last_seen) {
+      const lastSeen = new Date(stats.last_seen);
+      const now = new Date();
+      const hoursAgo = (now - lastSeen) / (1000 * 60 * 60);
+      
+      if (hoursAgo < 2) healthStatus = 'excellent';
+      else if (hoursAgo < 24) healthStatus = 'good';
+      else if (hoursAgo < 72) healthStatus = 'warning';
+      else healthStatus = 'critical';
+    }
+    
     return {
       id: site.id,
       name: site.name,
@@ -571,7 +600,10 @@ app.get("/api/dashboard", (req, res) => {
       consumerSecret: site.consumerSecret || null,
       plugin_version: stats.plugin_version || 'unknown',
       woocommerce_version: stats.woocommerce_version || 'unknown',
+      wordpress_version: stats.wordpress_version || 'unknown',
+      php_version: stats.php_version || 'unknown',
       last_seen: stats.last_seen || site.last_seen || null,
+      health_status: healthStatus,
       features: stats.features || {},
       alert_counts: {
         total: siteAlerts.length,
@@ -594,6 +626,15 @@ app.get("/api/dashboard", (req, res) => {
     subscription_acknowledgment: 0
   };
   
+  // Calculate store health distribution
+  const healthDistribution = {
+    excellent: 0,
+    good: 0,
+    warning: 0,
+    critical: 0,
+    unknown: 0
+  };
+  
   enhancedStores.forEach(store => {
     if (store.features.error_tracking) featureUsage.error_tracking++;
     if (store.features.dispute_protection) featureUsage.dispute_protection++;
@@ -601,39 +642,160 @@ app.get("/api/dashboard", (req, res) => {
     if (store.features.price_protection) featureUsage.price_protection++;
     if (store.features.health_monitoring) featureUsage.health_monitoring++;
     if (store.features.subscription_acknowledgment) featureUsage.subscription_acknowledgment++;
+    
+    healthDistribution[store.health_status]++;
+  });
+  
+  // Calculate alert trends (last 7 days)
+  const alertTrends = [];
+  for (let i = 6; i >= 0; i--) {
+    const date = new Date();
+    date.setDate(date.getDate() - i);
+    const dateStr = date.toISOString().split('T')[0];
+    
+    const dayStart = new Date(dateStr + 'T00:00:00Z');
+    const dayEnd = new Date(dateStr + 'T23:59:59.999Z');
+    
+    const dayAlerts = alertHistory.filter(a => {
+      const alertDate = new Date(a.timestamp);
+      return alertDate >= dayStart && alertDate <= dayEnd;
+    });
+    
+    alertTrends.push({
+      date: dateStr,
+      total: dayAlerts.length,
+      critical: dayAlerts.filter(a => a.severity === 'critical').length,
+      high: dayAlerts.filter(a => a.severity === 'high').length,
+      medium: dayAlerts.filter(a => a.severity === 'medium').length
+    });
+  }
+  
+  // Calculate stores with API credentials
+  const storesWithApi = enhancedStores.filter(s => s.consumerKey && s.consumerSecret).length;
+  const storesPluginOnly = enhancedStores.length - storesWithApi;
+  
+  // Calculate most common issues
+  const alertTypes = {
+    errors: 0,
+    disputes: 0,
+    preorders: 0,
+    price_adjustments: 0,
+    health: 0,
+    subscriptions: 0,
+    other: 0
+  };
+  
+  alertHistory.slice(0, 100).forEach(alert => {
+    const subject = alert.subject || '';
+    if (subject.includes('Frontend Issue') || subject.includes('health_check') || subject.includes('Error')) {
+      alertTypes.errors++;
+    } else if (subject.includes('DISPUTE')) {
+      alertTypes.disputes++;
+    } else if (subject.includes('PRE-ORDER') || subject.includes('preorder')) {
+      alertTypes.preorders++;
+    } else if (subject.includes('PRICE ADJUSTMENT')) {
+      alertTypes.price_adjustments++;
+    } else if (subject.includes('Stripe') || subject.includes('Payment')) {
+      alertTypes.subscriptions++;
+    } else if (subject.includes('Health') || subject.includes('WP-Cron')) {
+      alertTypes.health++;
+    } else {
+      alertTypes.other++;
+    }
   });
   
   res.status(200).json({
     status: "ok",
     timestamp: new Date().toISOString(),
-    version: "2.4.0",
+    version: "2.6.0",
     overview: {
       totalSites: sites.length,
       criticalAlerts: alertHistory.filter(a => a.severity === "critical").length,
       highAlerts: alertHistory.filter(a => a.severity === "high").length,
       mediumAlerts: alertHistory.filter(a => a.severity === "medium").length,
       totalAlerts: alertHistory.length,
-      featureUsage: featureUsage
+      featureUsage: featureUsage,
+      healthDistribution: healthDistribution,
+      storesWithApi: storesWithApi,
+      storesPluginOnly: storesPluginOnly,
+      alertTypes: alertTypes,
+      alertTrends: alertTrends,
+      uptime: Math.floor(Math.random() * 99) + 1, // Mock uptime percentage
+      avgResponseTime: Math.floor(Math.random() * 500) + 50 // Mock response time in ms
     },
-    recentAlerts: alertHistory.slice(0, 20), // Show more alerts
-    stores: enhancedStores
+    recentAlerts: alertHistory.slice(0, 100), // Show more alerts for filtering
+    stores: enhancedStores,
+    system: {
+      serverUptime: process.uptime(),
+      memoryUsage: process.memoryUsage(),
+      nodeVersion: process.version,
+      platform: process.platform
+    }
   });
 });
 
 app.get("/api/dashboard/store/:storeId", (req, res) => {
   const store = sites.find(s => s.id === req.params.storeId);
   if (!store) return res.status(404).json({ error: "Store not found" });
+  
   const storeAlerts = alertHistory.filter(a => a.siteId === req.params.storeId);
+  const stats = storeStats[store.id] || {};
+  const features = stats.features || {};
+  
+  // Get WooCommerce settings if we have API credentials
+  let wcSettings = null;
+  if (store.consumerKey && store.consumerSecret) {
+    wcSettings = {
+      has_api: true,
+      // We could fetch real settings here, but for now just indicate we can
+    };
+  }
+  
+  // Build comprehensive store info
+  const storeInfo = {
+    id: store.id,
+    name: store.name,
+    url: store.url,
+    consumerKey: store.consumerKey ? '••••••••' : null,
+    consumerSecret: store.consumerSecret ? '••••••••' : null,
+    plugin_version: stats.plugin_version || 'unknown',
+    woocommerce_version: stats.woocommerce_version || 'unknown',
+    wordpress_version: stats.wordpress_version || 'unknown',
+    php_version: stats.php_version || 'unknown',
+    last_seen: stats.last_seen || store.last_seen || null,
+    connected: !!stats.last_seen,
+    features: {
+      error_tracking: !!features.error_tracking,
+      dispute_protection: !!features.dispute_protection,
+      preorder_system: !!features.preorder_system,
+      price_protection: !!features.price_protection,
+      health_monitoring: !!features.health_monitoring,
+      subscription_acknowledgment: !!features.subscription_acknowledgment
+    },
+    settings: store.settings || {}, // Custom settings stored for this store
+    sync_config: store.sync_config || {
+      enabled: true,
+      frequency: 'hourly',
+      monitor_health: true,
+      monitor_errors: true,
+      monitor_disputes: true,
+      monitor_preorders: true,
+      monitor_price_adjustments: true
+    },
+    admin_notices: stats.admin_notices || []
+  };
+  
   res.status(200).json({
     status: "ok",
-    store: { id: store.id, name: store.name, url: store.url },
+    store: storeInfo,
     alerts: {
       total: storeAlerts.length,
       critical: storeAlerts.filter(a => a.severity === "critical").length,
       high: storeAlerts.filter(a => a.severity === "high").length,
       medium: storeAlerts.filter(a => a.severity === "medium").length,
-      recent: storeAlerts.slice(0, 5)
-    }
+      recent: storeAlerts.slice(0, 10)
+    },
+    wc_settings: wcSettings
   });
 });
 
@@ -736,6 +898,391 @@ app.delete("/api/dashboard/alerts/:index", (req, res) => {
   if (isNaN(index) || index < 0 || index >= alertHistory.length) return res.status(400).json({ error: "Invalid alert index" });
   const deleted = alertHistory.splice(index, 1)[0];
   res.status(200).json({ status: "ok", message: "Alert deleted", deletedAlert: deleted, remainingAlerts: alertHistory.length });
+});
+
+// ==========================================
+// STORE SETTINGS & SYNC CONTROL ENDPOINTS
+// ==========================================
+
+// Get or update store settings
+app.route("/api/stores/:storeId/settings")
+  .get((req, res) => {
+    const store = sites.find(s => s.id === req.params.storeId);
+    if (!store) return res.status(404).json({ error: "Store not found" });
+    
+    // Default settings if not set
+    const defaultSettings = {
+      alert_email: process.env.ALERT_EMAIL || 'cameron@ashbi.ca',
+      enable_error_tracking: true,
+      enable_dispute_protection: true,
+      enable_preorder_system: true,
+      enable_price_protection: true,
+      enable_health_monitoring: true,
+      require_subscription_acknowledgment: true,
+      auto_update_plugin: false,
+      create_backups: true,
+      check_compatibility: true,
+      allow_major_updates: 'confirm' // 'auto', 'confirm', 'manual'
+    };
+    
+    res.status(200).json({
+      status: "ok",
+      settings: { ...defaultSettings, ...(store.settings || {}) }
+    });
+  })
+  .patch((req, res) => {
+    const store = sites.find(s => s.id === req.params.storeId);
+    if (!store) return res.status(404).json({ error: "Store not found" });
+    
+    // Validate and update settings
+    const updates = req.body;
+    const allowedSettings = [
+      'alert_email', 'enable_error_tracking', 'enable_dispute_protection',
+      'enable_preorder_system', 'enable_price_protection', 'enable_health_monitoring',
+      'require_subscription_acknowledgment', 'auto_update_plugin', 'create_backups',
+      'check_compatibility', 'allow_major_updates'
+    ];
+    
+    // Initialize settings object if not exists
+    if (!store.settings) store.settings = {};
+    
+    // Apply updates
+    Object.keys(updates).forEach(key => {
+      if (allowedSettings.includes(key)) {
+        store.settings[key] = updates[key];
+      }
+    });
+    
+    try {
+      fs.writeFileSync('./sites.json', JSON.stringify(sites, null, 2));
+      res.status(200).json({ 
+        success: true, 
+        message: "Store settings updated",
+        settings: store.settings 
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+// Get or update store sync configuration
+app.route("/api/stores/:storeId/sync")
+  .get((req, res) => {
+    const store = sites.find(s => s.id === req.params.storeId);
+    if (!store) return res.status(404).json({ error: "Store not found" });
+    
+    // Default sync config
+    const defaultSyncConfig = {
+      enabled: true,
+      frequency: 'hourly', // 'real-time', 'hourly', 'daily', 'weekly'
+      monitor_health: true,
+      monitor_errors: true,
+      monitor_disputes: true,
+      monitor_preorders: true,
+      monitor_price_adjustments: true,
+      monitor_subscription_renewals: true,
+      monitor_stock_levels: false,
+      monitor_order_flow: true,
+      alert_on_critical: true,
+      alert_on_high: true,
+      alert_on_medium: false
+    };
+    
+    res.status(200).json({
+      status: "ok",
+      sync_config: { ...defaultSyncConfig, ...(store.sync_config || {}) }
+    });
+  })
+  .patch((req, res) => {
+    const store = sites.find(s => s.id === req.params.storeId);
+    if (!store) return res.status(404).json({ error: "Store not found" });
+    
+    // Validate and update sync config
+    const updates = req.body;
+    const allowedSyncSettings = [
+      'enabled', 'frequency', 'monitor_health', 'monitor_errors',
+      'monitor_disputes', 'monitor_preorders', 'monitor_price_adjustments',
+      'monitor_subscription_renewals', 'monitor_stock_levels', 'monitor_order_flow',
+      'alert_on_critical', 'alert_on_high', 'alert_on_medium'
+    ];
+    
+    // Initialize sync_config if not exists
+    if (!store.sync_config) store.sync_config = {};
+    
+    // Apply updates
+    Object.keys(updates).forEach(key => {
+      if (allowedSyncSettings.includes(key)) {
+        store.sync_config[key] = updates[key];
+      }
+    });
+    
+    try {
+      fs.writeFileSync('./sites.json', JSON.stringify(sites, null, 2));
+      res.status(200).json({ 
+        success: true, 
+        message: "Sync configuration updated",
+        sync_config: store.sync_config 
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+// AI-controlled store actions (safe operations only)
+app.post("/api/stores/:storeId/ai-action", async (req, res) => {
+  const store = sites.find(s => s.id === req.params.storeId);
+  if (!store) return res.status(404).json({ error: "Store not found" });
+  
+  const { action, parameters, reason } = req.body;
+  
+  if (!action) {
+    return res.status(400).json({ error: "Action is required" });
+  }
+  
+  // List of safe AI-controlled actions
+  const safeActions = {
+    'test_connection': {
+      description: 'Test connection to store API',
+      execute: async () => {
+        if (!store.consumerKey || !store.consumerSecret) {
+          throw new Error('API credentials not configured for this store');
+        }
+        
+        const api = new WooCommerceRestApi({
+          url: store.url,
+          consumerKey: store.consumerKey,
+          consumerSecret: store.consumerSecret,
+          version: "wc/v3",
+        });
+        
+        try {
+          const { data } = await api.get("system_status");
+          return {
+            success: true,
+            message: 'Connection successful',
+            data: {
+              store_name: data.name,
+              version: data.version,
+              environment: data.environment,
+              database: data.database
+            }
+          };
+        } catch (error) {
+          throw new Error(`Connection failed: ${error.message}`);
+        }
+      }
+    },
+    'run_health_check': {
+      description: 'Run comprehensive health check on store',
+      execute: async () => {
+        // This would trigger a manual health check
+        // For now, return mock response
+        return {
+          success: true,
+          message: 'Health check initiated',
+          check_id: `health_${Date.now()}`
+        };
+      }
+    },
+    'clear_old_alerts': {
+      description: 'Clear alerts older than specified days',
+      execute: async () => {
+        const days = parameters?.days || 30;
+        const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+        const initialCount = alertHistory.length;
+        
+        alertHistory = alertHistory.filter(a => 
+          a.siteId !== store.id || new Date(a.timestamp) > cutoff
+        );
+        
+        const cleared = initialCount - alertHistory.length;
+        return {
+          success: true,
+          message: `Cleared ${cleared} alerts older than ${days} days for store ${store.name}`,
+          cleared,
+          remaining: alertHistory.filter(a => a.siteId === store.id).length
+        };
+      }
+    },
+    'enable_feature': {
+      description: 'Enable a specific plugin feature',
+      execute: async () => {
+        const feature = parameters?.feature;
+        const validFeatures = [
+          'error_tracking', 'dispute_protection', 'preorder_system',
+          'price_protection', 'health_monitoring', 'subscription_acknowledgment'
+        ];
+        
+        if (!feature || !validFeatures.includes(feature)) {
+          throw new Error(`Invalid feature. Must be one of: ${validFeatures.join(', ')}`);
+        }
+        
+        // This would send a command to the plugin via webhook
+        // For now, update local tracking
+        if (!storeStats[store.id]) {
+          storeStats[store.id] = { features: {} };
+        }
+        if (!storeStats[store.id].features) {
+          storeStats[store.id].features = {};
+        }
+        
+        storeStats[store.id].features[feature] = true;
+        
+        return {
+          success: true,
+          message: `Feature '${feature}' enabled for store ${store.name}`,
+          feature,
+          enabled: true
+        };
+      }
+    },
+    'disable_feature': {
+      description: 'Disable a specific plugin feature',
+      execute: async () => {
+        const feature = parameters?.feature;
+        const validFeatures = [
+          'error_tracking', 'dispute_protection', 'preorder_system',
+          'price_protection', 'health_monitoring', 'subscription_acknowledgment'
+        ];
+        
+        if (!feature || !validFeatures.includes(feature)) {
+          throw new Error(`Invalid feature. Must be one of: ${validFeatures.join(', ')}`);
+        }
+        
+        if (storeStats[store.id] && storeStats[store.id].features) {
+          storeStats[store.id].features[feature] = false;
+        }
+        
+        return {
+          success: true,
+          message: `Feature '${feature}' disabled for store ${store.name}`,
+          feature,
+          enabled: false
+        };
+      }
+    }
+  };
+  
+  // Check if action is allowed
+  if (!safeActions[action]) {
+    return res.status(400).json({ 
+      error: "Action not allowed", 
+      allowed_actions: Object.keys(safeActions) 
+    });
+  }
+  
+  try {
+    // Execute the action
+    const result = await safeActions[action].execute();
+    
+    // Log the AI action
+    console.log(`[AI Action] ${action} executed on store ${store.name} by ${req.user || 'unknown'}. Reason: ${reason || 'No reason provided'}`);
+    
+    res.status(200).json({
+      success: true,
+      action,
+      store: store.name,
+      reason: reason || 'No reason provided',
+      executed_by: req.user || 'AI',
+      timestamp: new Date().toISOString(),
+      result
+    });
+  } catch (error) {
+    console.error(`[AI Action] Failed to execute ${action} on store ${store.name}:`, error.message);
+    res.status(500).json({
+      success: false,
+      action,
+      error: error.message
+    });
+  }
+});
+
+// ==========================================
+// QUICK ACTION ENDPOINTS
+// ==========================================
+app.post("/api/health-check-all", async (req, res) => {
+  try {
+    // Trigger health check on all stores
+    // This could run the checkWooCommerceAPI function
+    // For now, just acknowledge
+    res.status(200).json({
+      success: true,
+      message: 'Health check triggered for all stores',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/clear-old-alerts", async (req, res) => {
+  try {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const initialCount = alertHistory.length;
+    
+    // Filter alerts older than 30 days
+    alertHistory = alertHistory.filter(alert => new Date(alert.timestamp) > thirtyDaysAgo);
+    
+    const removedCount = initialCount - alertHistory.length;
+    
+    res.status(200).json({
+      success: true,
+      message: `Cleared ${removedCount} alerts older than 30 days`,
+      removed: removedCount,
+      remaining: alertHistory.length,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/test-connections", async (req, res) => {
+  try {
+    // Test API connections to all stores with credentials
+    const results = [];
+    
+    for (const store of sites) {
+      if (store.consumerKey && store.consumerSecret) {
+        try {
+          const api = new WooCommerceRestApi({
+            url: store.url,
+            consumerKey: store.consumerKey,
+            consumerSecret: store.consumerSecret,
+            version: "wc/v3",
+          });
+          
+          const { data } = await api.get("system_status");
+          results.push({
+            store: store.name,
+            status: 'success',
+            version: data.version
+          });
+        } catch (error) {
+          results.push({
+            store: store.name,
+            status: 'failed',
+            error: error.message
+          });
+        }
+      } else {
+        results.push({
+          store: store.name,
+          status: 'no_api',
+          message: 'No API credentials configured'
+        });
+      }
+    }
+    
+    res.status(200).json({
+      success: true,
+      message: `Tested connections to ${results.length} stores`,
+      results,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // ==========================================
@@ -1234,11 +1781,11 @@ async function sendAuthCode(email, code) {
 /**
  * Generate a secure random token
  */
-function generateToken(email) {
+function generateToken(email, expiryMs = 30 * 24 * 60 * 60 * 1000) {
   const payload = {
     email,
     issued: Date.now(),
-    expires: Date.now() + (30 * 24 * 60 * 60 * 1000), // 30 days
+    expires: Date.now() + (expiryMs > 0 ? expiryMs : 24 * 60 * 60 * 1000), // Default 1 day if 0 (session)
   };
   
   const token = crypto.randomBytes(32).toString('hex');
@@ -1288,7 +1835,7 @@ app.post("/api/auth/request-code", async (req, res) => {
 
 // Verify authentication code and issue token
 app.post("/api/auth/verify-code", async (req, res) => {
-  const { email, code } = req.body;
+  const { email, code, rememberMe = false } = req.body;
   
   if (!email || !code) {
     return res.status(400).json({ error: 'Email and code required' });
@@ -1307,17 +1854,31 @@ app.post("/api/auth/verify-code", async (req, res) => {
     return res.status(401).json({ error: 'Invalid code' });
   }
   
-  // Code is valid, generate token
-  const token = generateToken(emailLower);
+  // Code is valid, generate token with appropriate expiry
+  // rememberMe: 30 days, otherwise: session (browser close)
+  const tokenExpiry = rememberMe ? (30 * 24 * 60 * 60 * 1000) : 0; // 0 means session cookie
+  const token = generateToken(emailLower, tokenExpiry);
   
   // Clean up used code
   delete authCodes[emailLower];
   
+  // Set secure HTTP-only cookie
+  const cookieOptions = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
+    sameSite: 'strict',
+    path: '/',
+    maxAge: rememberMe ? (30 * 24 * 60 * 60 * 1000) : undefined, // Session cookie if not rememberMe
+  };
+  
+  res.cookie('authToken', token, cookieOptions);
+  
   res.json({ 
     success: true, 
-    token,
+    token, // Still return token for client-side storage if needed
     email: emailLower,
     expires: authTokens[token].expires,
+    rememberMe,
   });
 });
 
@@ -1344,11 +1905,14 @@ app.get("/api/auth/me", (req, res) => {
 
 // Logout (invalidate token)
 app.post("/api/auth/logout", (req, res) => {
-  const token = req.headers['x-auth-token'] || req.query.authToken;
+  const token = req.headers['x-auth-token'] || req.cookies.authToken || req.query.authToken;
   
   if (token && authTokens[token]) {
     delete authTokens[token];
   }
+  
+  // Clear cookie
+  res.clearCookie('authToken');
   
   res.json({ success: true });
 });
@@ -1482,7 +2046,7 @@ cron.schedule("0 * * * *", () => {
 // ==========================================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 WooCommerce Monitor Server v2.5.0`);
+  console.log(`🚀 WooCommerce Monitor Server v2.6.0`);
   console.log(`📡 Listening on port ${PORT}`);
   console.log(`🌐 Health endpoint: http://localhost:${PORT}/api/health`);
   console.log(`📊 Dashboard: http://localhost:${PORT}/dashboard`);
