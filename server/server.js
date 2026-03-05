@@ -185,6 +185,18 @@ app.post("/api/track-woo-error", async (req, res) => {
       } catch (err) {
         console.error('Failed to save sites.json:', err.message);
       }
+    } else {
+      // Update existing store with new ID and version
+      existingStore.id = req.body.store_id;
+      existingStore.plugin_version = req.body.plugin_version;
+      existingStore.woocommerce_version = req.body.woocommerce_version;
+      existingStore.last_seen = new Date().toISOString();
+      try {
+        fs.writeFileSync('./sites.json', JSON.stringify(sites, null, 2));
+        console.log(`✅ Updated existing store: ${req.body.store_name} to v${req.body.plugin_version}`);
+      } catch (err) {
+        console.error('Failed to save sites.json:', err.message);
+      }
     }
     
     // Update store stats
@@ -290,7 +302,7 @@ app.get("/api/health", (req, res) => {
   res.status(200).json({
     status: "ok",
     timestamp: new Date().toISOString(),
-    version: "2.3.0",
+    version: "2.3.1",
     features: {
       frontend_monitoring: true,
       backend_health_checks: sites.length > 0,
@@ -427,7 +439,7 @@ app.get("/api/dashboard", (req, res) => {
   res.status(200).json({
     status: "ok",
     timestamp: new Date().toISOString(),
-    version: "2.3.0",
+    version: "2.3.1",
     overview: {
       totalSites: sites.length,
       criticalAlerts: alertHistory.filter(a => a.severity === "critical").length,

@@ -3,7 +3,7 @@
  * Plugin Name: WooCommerce Comprehensive Monitor & Dispute Protection
  * Plugin URI: https://ashbi.ca
  * Description: Complete WooCommerce monitoring, error tracking, dispute protection, and health alerts. Combines frontend monitoring, dispute evidence generation, and centralized health reporting.
- * Version: 4.4.5
+ * Version: 4.4.6
  * Author: Ashbi
  * Author URI: https://ashbi.ca
  * License: GPL2
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('WCM_VERSION', '4.4.5');
+define('WCM_VERSION', '4.4.6');
 define('WCM_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WCM_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('WCM_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -371,7 +371,7 @@ class WooComprehensiveMonitor {
             'wcm_send_dispute_alerts' => '1',
             'wcm_enable_health_monitoring' => '1',
             'wcm_health_check_interval' => '3600', // 1 hour
-            'wcm_store_id' => $this->generate_store_id(),
+            'wcm_store_id' => get_option('wcm_store_id', $this->generate_store_id()),
             'wcm_acknowledgment_text' => 'I acknowledge that I will be charged recurring payments for future subscription renewals. I understand that these charges will continue until I cancel my subscription.',
             'wcm_force_all_products' => '0',
             // Subscription price protection settings
@@ -418,11 +418,16 @@ class WooComprehensiveMonitor {
      */
     private function generate_store_id() {
         $site_url = get_site_url();
-        $store_name = get_bloginfo('name');
-
-        // Create a unique but readable store ID
-        $store_id = 'store-' . substr(md5($site_url), 0, 8) . '-' . time();
-
+        
+        // Check if we already have a store ID
+        $existing_id = get_option('wcm_store_id');
+        if ($existing_id && strpos($existing_id, 'store-') === 0) {
+            return $existing_id;
+        }
+        
+        // Create a consistent store ID based on site URL
+        $store_id = 'store-' . substr(md5($site_url), 0, 8);
+        
         // Make it URL-safe
         $store_id = sanitize_title($store_id);
 
