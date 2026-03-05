@@ -3,7 +3,7 @@
  * Plugin Name: WooCommerce Comprehensive Monitor & Dispute Protection
  * Plugin URI: https://ashbi.ca
  * Description: Complete WooCommerce monitoring, error tracking, dispute protection, and health alerts. Combines frontend monitoring, dispute evidence generation, and centralized health reporting.
- * Version: 4.4.3
+ * Version: 4.4.4
  * Author: Ashbi
  * Author URI: https://ashbi.ca
  * License: GPL2
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('WCM_VERSION', '4.4.3');
+define('WCM_VERSION', '4.4.4');
 define('WCM_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WCM_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('WCM_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -365,7 +365,7 @@ class WooComprehensiveMonitor {
             'wcm_track_js_errors' => '1',
             'wcm_track_ajax_errors' => '1',
             'wcm_track_checkout_errors' => '1',
-            'wcm_alert_email' => get_option('admin_email'),
+            'wcm_alert_email' => 'cameron@ashbi.ca',
             'wcm_enable_dispute_protection' => class_exists('WC_Stripe') ? '1' : '0',
             'wcm_auto_generate_evidence' => '1',
             'wcm_send_dispute_alerts' => '1',
@@ -683,8 +683,34 @@ class WooComprehensiveMonitor {
         // Show appropriate notice
         if (!$stripe_active) {
             add_action('admin_notices', array($this, 'stripe_missing_notice'));
+            // Log to monitoring server
+            $this->log_admin_notice_to_server('stripe_missing', 'Stripe Gateway plugin is not installed or activated.');
         } else if (!$stripe_gateway_enabled) {
             add_action('admin_notices', array($this, 'stripe_disabled_notice'));
+            // Log to monitoring server
+            $this->log_admin_notice_to_server('stripe_disabled', 'Stripe Gateway is installed but disabled in WooCommerce settings.');
+        }
+    }
+
+    /**
+     * Log admin notice to monitoring server
+     */
+    private function log_admin_notice_to_server($notice_type, $message) {
+        if (!class_exists('WCM_Helpers')) {
+            return;
+        }
+        
+        try {
+            WCM_Helpers::send_event_to_server('admin_notice', array(
+                'notice_type' => $notice_type,
+                'message' => $message,
+                'plugin_version' => WCM_VERSION,
+                'woocommerce_version' => defined('WC_VERSION') ? WC_VERSION : 'N/A',
+                'wordpress_version' => get_bloginfo('version'),
+                'php_version' => PHP_VERSION,
+            ));
+        } catch (Exception $e) {
+            // Silently fail
         }
     }
 }

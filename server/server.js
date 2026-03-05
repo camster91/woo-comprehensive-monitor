@@ -228,6 +228,47 @@ app.post("/api/track-woo-error", async (req, res) => {
     return res.status(200).json({ success: true });
   }
 
+  // --- Admin notices (plugin warnings, errors, etc.) ---
+  if (type === 'admin_notice') {
+    const noticeTypes = {
+      'stripe_missing': '⚠️ Stripe Missing',
+      'stripe_disabled': '⚠️ Stripe Disabled',
+      'activation_error': '❌ Activation Error',
+      'compatibility_warning': '⚠️ Compatibility Warning'
+    };
+    const noticeLabel = noticeTypes[req.body.notice_type] || req.body.notice_type || 'Admin Notice';
+    const subject = `${noticeLabel} on ${req.body.store_name}`;
+    const message = `Admin notice from plugin.\n\nStore: ${req.body.store_name}\nURL: ${req.body.store_url}\nNotice Type: ${req.body.notice_type}\nMessage: ${req.body.message}\nPlugin Version: ${req.body.plugin_version}\nWooCommerce: ${req.body.woocommerce_version}\nWordPress: ${req.body.wordpress_version}\nPHP: ${req.body.php_version}\nTime: ${req.body.timestamp}`;
+    
+    // Store admin notice for dashboard
+    const siteObj = sites.find(s => s.url.includes(req.body.store_url) || req.body.store_url.includes(s.url));
+    if (siteObj) {
+      // Add to store stats
+      if (!storeStats[req.body.store_id]) {
+        updateStoreStats(req.body.store_id, {
+          plugin_version: req.body.plugin_version,
+          woocommerce_version: req.body.woocommerce_version
+        });
+      }
+      if (!storeStats[req.body.store_id].admin_notices) {
+        storeStats[req.body.store_id].admin_notices = [];
+      }
+      storeStats[req.body.store_id].admin_notices.unshift({
+        type: req.body.notice_type,
+        message: req.body.message,
+        timestamp: req.body.timestamp
+      });
+      // Keep only last 20 notices
+      if (storeStats[req.body.store_id].admin_notices.length > 20) {
+        storeStats[req.body.store_id].admin_notices.pop();
+      }
+    }
+    
+    // Send alert
+    await sendAlert(subject, message, siteObj ? siteObj.id : null, "medium");
+    return res.status(200).json({ success: true });
+  }
+
   // --- Regular frontend error tracking ---
   const subject = `Frontend Issue on ${site}: ${type}`;
   const message = `A customer just hit a frontend issue!\nSite: ${site}\nURL: ${url || 'Unknown'}\nError Type: ${type}\nError Message: ${error_message}\nTime: ${time || new Date().toISOString()}`;
@@ -249,7 +290,7 @@ app.get("/api/health", (req, res) => {
   res.status(200).json({
     status: "ok",
     timestamp: new Date().toISOString(),
-    version: "2.2.0",
+    version: "2.3.0",
     features: {
       frontend_monitoring: true,
       backend_health_checks: sites.length > 0,
@@ -283,7 +324,8 @@ sites.forEach(site => {
         preorders: 0,
         price_adjustments: 0,
         health_critical: 0
-      }
+      },
+      admin_notices: []
     };
   }
 });
@@ -303,7 +345,8 @@ function updateStoreStats(storeId, data) {
         preorders: 0,
         price_adjustments: 0,
         health_critical: 0
-      }
+      },
+      admin_notices: []
     };
   }
   
@@ -357,7 +400,8 @@ app.get("/api/dashboard", (req, res) => {
         disputes: disputeAlerts,
         preorders: preorderAlerts,
         price_adjustments: priceAdjustmentAlerts
-      }
+      },
+      admin_notices: stats.admin_notices || []
     };
   });
   
@@ -383,7 +427,7 @@ app.get("/api/dashboard", (req, res) => {
   res.status(200).json({
     status: "ok",
     timestamp: new Date().toISOString(),
-    version: "2.2.0",
+    version: "2.3.0",
     overview: {
       totalSites: sites.length,
       criticalAlerts: alertHistory.filter(a => a.severity === "critical").length,
@@ -675,7 +719,7 @@ cron.schedule("0 * * * *", () => {
 // ==========================================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 WooCommerce Monitor Server v2.1.0`);
+  console.log(`🚀 WooCommerce Monitor Server v2.3.0`);
   console.log(`📡 Listening on port ${PORT}`);
   console.log(`🌐 Health endpoint: http://localhost:${PORT}/api/health`);
   console.log(`📊 Dashboard: http://localhost:${PORT}/dashboard`);
