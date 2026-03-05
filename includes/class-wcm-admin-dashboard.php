@@ -330,12 +330,48 @@ class WCM_Admin_Dashboard {
     // HEALTH PAGE
     // ==========================================
     public function render_health_page() {
-        $wcm  = wcm();
+        $wcm   = wcm();
         $logs  = $wcm->get_health_monitor()->get_recent_health_logs( 50 );
         $score = $wcm->get_health_monitor()->get_health_score();
+        
+        // Run a fresh health check to get current issues and actionable fixes
+        $current_checks = $wcm->get_health_monitor()->run_health_check();
+        $fixes = $wcm->get_health_monitor()->get_actionable_fixes( $current_checks );
         ?>
         <div class="wrap wcm-admin">
             <h1><?php esc_html_e( 'Health Checks', 'woo-comprehensive-monitor' ); ?></h1>
+            
+            <?php if ( ! empty( $fixes ) ) : ?>
+            <div class="notice notice-warning" style="padding: 15px; margin-bottom: 20px;">
+                <h3 style="margin-top: 0;">⚠️ <?php esc_html_e( 'Action Required', 'woo-comprehensive-monitor' ); ?></h3>
+                <p><?php esc_html_e( 'The following issues were detected and can be fixed automatically:', 'woo-comprehensive-monitor' ); ?></p>
+                
+                <div class="wcm-fixes-container" style="margin-top: 15px;">
+                    <?php foreach ( $fixes as $fix ) : ?>
+                    <div class="wcm-fix-item" style="background: #f9f9f9; border-left: 4px solid #FF9800; padding: 12px 15px; margin-bottom: 10px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong><?php echo esc_html( $fix['name'] ); ?>:</strong> <?php echo esc_html( $fix['issue'] ); ?>
+                                <?php if ( ! empty( $fix['description'] ) ) : ?>
+                                <p style="margin: 5px 0 0 0; color: #666; font-size: 13px;"><?php echo esc_html( $fix['description'] ); ?></p>
+                                <?php endif; ?>
+                            </div>
+                            <div>
+                                <?php if ( ! empty( $fix['external_link'] ) ) : ?>
+                                <a href="<?php echo esc_url( $fix['external_link'] ); ?>" class="button button-primary" target="_blank"><?php echo esc_html( $fix['button_text'] ); ?></a>
+                                <?php else : ?>
+                                <button type="button" class="button button-primary wcm-fix-issue" data-action="<?php echo esc_attr( $fix['action'] ); ?>">
+                                    <?php echo esc_html( $fix['button_text'] ); ?>
+                                </button>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+            
             <p>
                 <button type="button" class="button button-primary" id="wcm-run-health-check"><?php esc_html_e( 'Run Health Check Now', 'woo-comprehensive-monitor' ); ?></button>
                 <span id="wcm-action-result" style="margin-left: 10px;"></span>

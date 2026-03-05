@@ -116,6 +116,11 @@ function wcm_save_settings() {
         update_option($option, isset($_POST[$option]) ? '1' : '0');
     }
     
+    // Suppress error patterns
+    if (isset($_POST['wcm_suppress_error_patterns'])) {
+        update_option('wcm_suppress_error_patterns', sanitize_textarea_field($_POST['wcm_suppress_error_patterns']));
+    }
+    
     // Dispute protection settings
     $dispute_options = array(
         'wcm_enable_dispute_protection',
@@ -338,6 +343,7 @@ function wcm_render_error_tracking_settings() {
     $track_js_errors = get_option('wcm_track_js_errors', '1');
     $track_ajax_errors = get_option('wcm_track_ajax_errors', '1');
     $track_checkout_errors = get_option('wcm_track_checkout_errors', '1');
+    $suppress_error_patterns = get_option('wcm_suppress_error_patterns', '');
     ?>
     
     <table class="form-table">
@@ -411,6 +417,27 @@ function wcm_render_error_tracking_settings() {
                         <?php _e('Errors are tracked in real-time and sent to your monitoring server.', 'woo-comprehensive-monitor'); ?>
                     </p>
                 </div>
+            </td>
+        </tr>
+        
+        <tr>
+            <th scope="row">
+                <label for="wcm_suppress_error_patterns">
+                    <?php _e('Suppress Error Patterns', 'woo-comprehensive-monitor'); ?>
+                </label>
+            </th>
+            <td>
+                <textarea 
+                    id="wcm_suppress_error_patterns" 
+                    name="wcm_suppress_error_patterns" 
+                    rows="4" 
+                    cols="50"
+                    class="regular-text"
+                    placeholder="<?php _e('jQuery is not defined&#10;Cannot read property&#10;Specific error text to ignore', 'woo-comprehensive-monitor'); ?>"
+                ><?php echo esc_textarea($suppress_error_patterns); ?></textarea>
+                <p class="description">
+                    <?php _e('Enter error message patterns to suppress (one per line). Errors containing these patterns will not trigger alerts.', 'woo-comprehensive-monitor'); ?>
+                </p>
             </td>
         </tr>
     </table>

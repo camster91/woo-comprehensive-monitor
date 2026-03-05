@@ -1,0 +1,659 @@
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: 10px;
+  border: none;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-decoration: none;
+}
+.btn-primary { background: #3182ce; color: white; }
+.btn-primary:hover { background: #2b6cb0; }
+.btn-success { background: #38a169; color: white; }
+.btn-success:hover { background: #2f855a; }
+.btn-danger { background: #e53e3e; color: white; }
+.btn-danger:hover { background: #c53030; }
+.btn-outline { background: transparent; color: #3182ce; border: 2px solid #3182ce; }
+.btn-outline:hover { background: rgba(49, 130, 206, 0.1); }
+.btn-sm { padding: 8px 16px; font-size: 14px; }
+
+/* Feature Cards */
+.feature-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin: 24px 0; }
+.feature-card { 
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  border: 1px solid #e2e8f0;
+  transition: all 0.3s;
+}
+.feature-card:hover { border-color: #3182ce; box-shadow: 0 8px 25px rgba(49, 130, 206, 0.1); }
+.feature-card .feature-icon { 
+  font-size: 32px; 
+  margin-bottom: 16px;
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.feature-card:nth-child(1) .feature-icon { background: #ebf8ff; color: #3182ce; }
+.feature-card:nth-child(2) .feature-icon { background: #f0fff4; color: #38a169; }
+.feature-card:nth-child(3) .feature-icon { background: #fff5f5; color: #e53e3e; }
+.feature-card:nth-child(4) .feature-icon { background: #fffaf0; color: #d69e2e; }
+.feature-card:nth-child(5) .feature-icon { background: #faf5ff; color: #805ad5; }
+.feature-card:nth-child(6) .feature-icon { background: #f7fafc; color: #4a5568; }
+.feature-title { font-weight: 700; font-size: 18px; margin-bottom: 8px; }
+.feature-desc { color: #718096; font-size: 14px; margin-bottom: 16px; }
+.feature-stats { display: flex; justify-content: space-between; font-size: 12px; color: #a0aec0; }
+.feature-stats .active { color: #38a169; font-weight: 600; }
+
+/* Utilities */
+.empty-state { 
+  text-align: center; 
+  padding: 60px 20px; 
+  color: #a0aec0; 
+  font-size: 16px; 
+}
+.empty-state .icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+.badge { 
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.badge-success { background: #c6f6d5; color: #22543d; }
+.badge-warning { background: #feebc8; color: #744210; }
+.badge-danger { background: #fed7d7; color: #742a2a; }
+.badge-info { background: #bee3f8; color: #2a4365; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .dashboard-grid { grid-template-columns: 1fr; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .feature-grid { grid-template-columns: repeat(2, 1fr); }
+  .header-stats { gap: 12px; }
+  .tabs { flex-wrap: wrap; }
+  .tab { flex: auto; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="header-content">
+      <h1><span style="font-size: 36px">🚀</span> WooCommerce Comprehensive Monitor</h1>
+      <p class="header-tagline">Monitor, protect, and optimize your WooCommerce stores with advanced subscription protection, dispute handling, and pre-order systems.</p>
+      <div class="header-stats">
+        <div class="stat-pill">🛒 <span id="total-stores" class="stat-value">0</span> stores connected</div>
+        <div class="stat-pill">🔔 <span id="total-alerts" class="stat-value">0</span> total alerts</div>
+        <div class="stat-pill">⚡ <span id="active-features" class="stat-value">0</span> active features</div>
+        <div class="stat-pill">🔄 <span id="server-version" class="stat-value">2.2.0</span> server version</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Dashboard Stats -->
+  <div class="dashboard-grid">
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">📊 Overview</h2>
+        <button class="btn btn-sm btn-outline" onclick="loadDashboard()">🔄 Refresh</button>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-box critical">
+          <div class="stat-value" id="critical-alerts">0</div>
+          <div class="stat-label">Critical Alerts</div>
+        </div>
+        <div class="stat-box warning">
+          <div class="stat-value" id="high-alerts">0</div>
+          <div class="stat-label">High Alerts</div>
+        </div>
+        <div class="stat-box success">
+          <div class="stat-value" id="total-stores-stat">0</div>
+          <div class="stat-label">Stores</div>
+        </div>
+        <div class="stat-box info">
+          <div class="stat-value" id="feature-usage">0</div>
+          <div class="stat-label">Features Active</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">🏪 Stores</h2>
+        <button class="btn btn-sm btn-primary" onclick="switchTab('stores')">View All</button>
+      </div>
+      <div id="recent-stores">
+        <div class="empty-state">
+          <div class="icon">🏪</div>
+          <p>No stores connected yet</p>
+          <p style="font-size: 14px; margin-top: 8px;">Install the plugin on a WooCommerce store to start monitoring</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">📨 Recent Alerts</h2>
+        <button class="btn btn-sm btn-outline" onclick="switchTab('alerts')">View All</button>
+      </div>
+      <div id="recent-alerts">
+        <div class="empty-state">
+          <div class="icon">📨</div>
+          <p>No alerts yet</p>
+          <p style="font-size: 14px; margin-top: 8px;">Alerts will appear here when issues are detected</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabs Navigation -->
+  <div class="tabs-container">
+    <div class="tabs">
+      <button class="tab active" data-tab="features" onclick="switchTab('features')">
+        <span>✨</span> Features
+      </button>
+      <button class="tab" data-tab="stores" onclick="switchTab('stores')">
+        <span>🏪</span> Stores
+      </button>
+      <button class="tab" data-tab="alerts" onclick="switchTab('alerts')">
+        <span>📨</span> Alerts
+      </button>
+      <button class="tab" data-tab="add-store" onclick="switchTab('add-store')">
+        <span>➕</span> Add Store
+      </button>
+      <button class="tab" data-tab="plugin" onclick="switchTab('plugin')">
+        <span>📥</span> Plugin
+      </button>
+    </div>
+  </div>
+
+  <!-- FEATURES PANEL -->
+  <div id="panel-features" class="panel active">
+    <div class="card">
+      <h2 class="card-title">✨ WordPress Plugin Features</h2>
+      <p class="card-subtitle">All features are included in the WooCommerce Comprehensive Monitor plugin v4.4.3</p>
+      
+      <div class="feature-cards">
+        <div class="feature-card">
+          <div class="feature-icon">🛡️</div>
+          <h3 class="feature-title">Subscription Price Protection</h3>
+          <p class="feature-desc">Automatically charges price differences when customers cancel subscriptions or convert to one-time purchases. Prevents revenue loss from early cancellations.</p>
+          <div class="feature-stats">
+            <span>Status: <span class="active">Active</span></span>
+            <span><span id="feature-price-protection">0</span>/<span id="total-stores-feature">0</span> stores</span>
+          </div>
+        </div>
+        
+        <div class="feature-card">
+          <div class="feature-icon">⚖️</div>
+          <h3 class="feature-title">Dispute Evidence Generator</h3>
+          <p class="feature-desc">Automatically generates evidence for Stripe disputes with subscription acknowledgments, order history, and customer communications.</p>
+          <div class="feature-stats">
+            <span>Status: <span class="active">Active</span></span>
+            <span><span id="feature-dispute">0</span>/<span id="total-stores-feature2">0</span> stores</span>
+          </div>
+        </div>
+        
+        <div class="feature-card">
+          <div class="feature-icon">📦</div>
+          <h3 class="feature-title">Pre-Order System</h3>
+          <p class="feature-desc">Backorders automatically become pre-orders. Charge customers when items ship using Stripe SetupIntents with automatic retry for failed charges.</p>
+          <div class="feature-stats">
+            <span>Status: <span class="active">Active</span></span>
+            <span><span id="feature-preorder">0</span>/<span id="total-stores-feature3">0</span> stores</span>
+          </div>
+        </div>
+        
+        <div class="feature-card">
+          <div class="feature-icon">🚨</div>
+          <h3 class="feature-title">Error Tracking</h3>
+          <p class="feature-desc">Frontend JavaScript error tracking, AJAX failures, and checkout issues. Real-time alerts with rate limiting to prevent abuse.</p>
+          <div class="feature-stats">
+            <span>Status: <span class="active">Active</span></span>
+            <span><span id="feature-error">0</span>/<span id="total-stores-feature4">0</span> stores</span>
+          </div>
+        </div>
+        
+        <div class="feature-card">
+          <div class="feature-icon">❤️</div>
+          <h3 class="feature-title">Health Monitoring</h3>
+          <p class="feature-desc">Deep health checks for WooCommerce APIs, Stripe connectivity, order status, subscription status, and plugin compatibility.</p>
+          <div class="feature-stats">
+            <span>Status: <span class="active">Active</span></span>
+            <span><span id="feature-health">0</span>/<span id="total-stores-feature5">0</span> stores</span>
+          </div>
+        </div>
+        
+        <div class="feature-card">
+          <div class="feature-icon">✅</div>
+          <h3 class="feature-title">Subscription Acknowledgment</h3>
+          <p class="feature-desc">Checkbox at checkout for customers to acknowledge subscription terms. Required for subscription purchases, stored as evidence.</p>
+          <div class="feature-stats">
+            <span>Status: <span class="active">Active</span></span>
+            <span><span id="feature-acknowledgment">0</span>/<span id="total-stores-feature6">0</span> stores</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STORES PANEL -->
+  <div id="panel-stores" class="panel">
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">🏪 Monitored Stores</h2>
+        <div>
+          <button class="btn btn-sm btn-outline" onclick="loadDashboard()">🔄 Refresh</button>
+          <button class="btn btn-sm btn-primary" onclick="switchTab('add-store')" style="margin-left: 8px;">➕ Add Store</button>
+        </div>
+      </div>
+      <div id="stores-list"></div>
+    </div>
+  </div>
+
+  <!-- ALERTS PANEL -->
+  <div id="panel-alerts" class="panel">
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">📨 All Alerts</h2>
+        <div>
+          <button class="btn btn-sm btn-outline" onclick="loadDashboard()">🔄 Refresh</button>
+          <button class="btn btn-sm btn-danger" onclick="clearAlerts()" style="margin-left: 8px;">🗑️ Clear All</button>
+        </div>
+      </div>
+      <div id="alerts-list"></div>
+    </div>
+  </div>
+
+  <!-- ADD STORE PANEL -->
+  <div id="panel-add-store" class="panel">
+    <div class="form-card">
+      <h2 class="card-title">➕ Add a Store</h2>
+      <p class="card-subtitle">Add a WooCommerce store for monitoring. Install the plugin for auto-connect, or add API credentials for backend health checks.</p>
+      
+      <form id="addStoreForm" onsubmit="addStore(event)">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="storeName">Store Name *</label>
+            <input type="text" id="storeName" class="form-control" required placeholder="My WooCommerce Store">
+          </div>
+          <div class="form-group">
+            <label for="storeUrl">Store URL *</label>
+            <input type="url" id="storeUrl" class="form-control" required placeholder="https://mystore.com">
+          </div>
+          <div class="form-group">
+            <label for="storeKey">WooCommerce Consumer Key</label>
+            <input type="text" id="storeKey" class="form-control" placeholder="ck_xxxxxxxxxxxx">
+            <small style="color: #718096; font-size: 12px;">WooCommerce → Settings → Advanced → REST API (Read permission)</small>
+          </div>
+          <div class="form-group">
+            <label for="storeSecret">WooCommerce Consumer Secret</label>
+            <input type="text" id="storeSecret" class="form-control" placeholder="cs_xxxxxxxxxxxx">
+            <small style="color: #718096; font-size: 12px;">Required for deep health checks (Stripe, orders, etc.)</small>
+          </div>
+        </div>
+        
+        <div style="display: flex; gap: 12px; align-items: center; margin-top: 24px;">
+          <button type="submit" class="btn btn-success">➕ Add Store</button>
+          <span id="addStoreResult" style="font-size: 14px;"></span>
+        </div>
+      </form>
+      
+      <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
+        <h3 style="margin-bottom: 16px;">📋 Current Configuration</h3>
+        <pre id="sites-config" style="background: #f7fafc; border-radius: 8px; padding: 16px; overflow: auto; font-size: 13px; color: #4a5568;"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- PLUGIN PANEL -->
+  <div id="panel-plugin" class="panel">
+    <div class="plugin-download">
+      <h2>📥 Download Plugin v4.4.3</h2>
+      <p>The WooCommerce Comprehensive Monitor plugin includes all features above. Install on your stores for auto‑connect to this dashboard.</p>
+      <a href="/download/plugin" target="_blank" class="download-btn">
+        <span>⬇️</span> Download Plugin ZIP
+      </a>
+      <p style="margin-top: 16px; font-size: 14px; opacity: 0.9;">Latest version: 4.4.3 | Compatible with WordPress 5.6+, WooCommerce 5.0+</p>
+    </div>
+    
+    <div class="card" style="margin-top: 24px;">
+      <h2 class="card-title">📋 Installation Instructions</h2>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; margin-top: 20px;">
+        <div>
+          <h3 style="margin-bottom: 12px; font-size: 18px;">1. Manual Installation</h3>
+          <ol style="color: #4a5568; line-height: 1.8; padding-left: 20px;">
+            <li>Download the plugin ZIP</li>
+            <li>Go to WordPress Admin → Plugins → Add New</li>
+            <li>Click "Upload Plugin" and select the ZIP file</li>
+            <li>Click "Install Now" then "Activate"</li>
+            <li>Store auto-connects to <code id="serverUrl"></code></li>
+          </ol>
+        </div>
+        <div>
+          <h3 style="margin-bottom: 12px; font-size: 18px;">2. ManageWP Batch Install</h3>
+          <ol style="color: #4a5568; line-height: 1.8; padding-left: 20px;">
+            <li>Upload the ZIP to your ManageWP plugin library</li>
+            <li>Select all your WooCommerce stores</li>
+            <li>Click "Install & Activate"</li>
+            <li>All stores appear in this dashboard instantly</li>
+            <li>Zero configuration required</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+    
+    <div class="card" style="margin-top: 24px;">
+      <h2 class="card-title">🔧 Plugin Configuration</h2>
+      <p style="color: #718096; margin-bottom: 16px;">After installation, configure these settings in WordPress:</p>
+      <ul style="color: #4a5568; line-height: 1.8; padding-left: 20px;">
+        <li><strong>General Settings</strong>: Enable/disable features, set monitoring server URL</li>
+        <li><strong>Price Protection</strong>: Configure one-time prices for subscription products</li>
+        <li><strong>Pre-Orders</strong>: Set up charge-on-ship, email notifications</li>
+        <li><strong>Dispute Protection</strong>: Configure Stripe webhook, evidence templates</li>
+        <li><strong>Health Monitoring</strong>: Set check intervals, alert thresholds</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+const BASE = window.location.origin;
+document.getElementById('serverUrl').textContent = BASE;
+
+let currentTab = 'features';
+
+function switchTab(name) {
+  currentTab = name;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelector(`[data-tab="${name}"]`).classList.add('active');
+  document.getElementById(`panel-${name}`).classList.add('active');
+  if (name === 'add-store') loadSitesConfig();
+}
+
+async function loadDashboard() {
+  try {
+    const res = await fetch('/api/dashboard');
+    const data = await res.json();
+
+    // Update header stats
+    document.getElementById('total-stores').textContent = data.overview.totalSites;
+    document.getElementById('total-alerts').textContent = data.overview.totalAlerts;
+    document.getElementById('active-features').textContent = 
+      Object.values(data.overview.featureUsage || {}).reduce((a, b) => a + b, 0);
+    
+    // Update overview stats
+    document.getElementById('critical-alerts').textContent = data.overview.criticalAlerts;
+    document.getElementById('high-alerts').textContent = data.overview.highAlerts;
+    document.getElementById('total-stores-stat').textContent = data.overview.totalSites;
+    document.getElementById('feature-usage').textContent = Object.values(data.overview.featureUsage || {}).reduce((a, b) => a + b, 0);
+    
+    // Update feature usage stats
+    const usage = data.overview.featureUsage || {};
+    document.getElementById('feature-price-protection').textContent = usage.price_protection || 0;
+    document.getElementById('feature-dispute').textContent = usage.dispute_protection || 0;
+    document.getElementById('feature-preorder').textContent = usage.preorder_system || 0;
+    document.getElementById('feature-error').textContent = usage.error_tracking || 0;
+    document.getElementById('feature-health').textContent = usage.health_monitoring || 0;
+    document.getElementById('feature-acknowledgment').textContent = usage.subscription_acknowledgment || 0;
+    
+    const totalStores = data.overview.totalSites;
+    document.querySelectorAll('#total-stores-feature, #total-stores-feature2, #total-stores-feature3, #total-stores-feature4, #total-stores-feature5, #total-stores-feature6')
+      .forEach(el => el.textContent = totalStores);
+    
+    // Update recent stores (max 3)
+    const recentStores = data.stores.slice(0, 3);
+    const recentStoresHtml = recentStores.length === 0
+      ? `<div class="empty-state"><div class="icon">🏪</div><p>No stores connected yet</p><p style="font-size: 14px; margin-top: 8px;">Install the plugin on a WooCommerce store to start monitoring</p></div>`
+      : recentStores.map(store => renderStoreCard(store, true)).join('');
+    document.getElementById('recent-stores').innerHTML = recentStoresHtml;
+    
+    // Update recent alerts (max 3)
+    const recentAlerts = data.recentAlerts.slice(0, 3);
+    const recentAlertsHtml = recentAlerts.length === 0
+      ? `<div class="empty-state"><div class="icon">📨</div><p>No alerts yet</p><p style="font-size: 14px; margin-top: 8px;">Alerts will appear here when issues are detected</p></div>`
+      : recentAlerts.map(alert => renderAlertItem(alert, true)).join('');
+    document.getElementById('recent-alerts').innerHTML = recentAlertsHtml;
+    
+    // Update stores list
+    const storesHtml = data.stores.length === 0
+      ? `<div class="empty-state"><div class="icon">🏪</div><p>No stores connected yet</p><p style="font-size: 14px; margin-top: 8px;">Add a store manually or install the plugin to auto-connect</p></div>`
+      : data.stores.map(store => renderStoreCard(store, false)).join('');
+    document.getElementById('stores-list').innerHTML = storesHtml;
+    
+    // Update alerts list
+    const alertsHtml = data.recentAlerts.length === 0
+      ? `<div class="empty-state"><div class="icon">📨</div><p>No alerts yet</p><p style="font-size: 14px; margin-top: 8px;">Alerts will appear here when issues are detected</p></div>`
+      : data.recentAlerts.map((alert, index) => renderAlertItem(alert, false, index)).join('');
+    document.getElementById('alerts-list').innerHTML = alertsHtml;
+
+  } catch(e) {
+    console.error('Dashboard load failed:', e);
+    showNotification('Error loading dashboard: ' + e.message, 'error');
+  }
+}
+
+function renderStoreCard(store, isCompact = false) {
+  const features = store.features || {};
+  const alertCounts = store.alert_counts || {};
+  
+  let featureItems = '';
+  if (!isCompact) {
+    featureItems = `
+      <div class="store-features">
+        <div class="feature-grid">
+          <div class="feature-item ${features.error_tracking ? 'active' : 'inactive'}">${features.error_tracking ? '✅' : '❌'} Error Tracking</div>
+          <div class="feature-item ${features.dispute_protection ? 'active' : 'inactive'}">${features.dispute_protection ? '✅' : '❌'} Dispute Protection</div>
+          <div class="feature-item ${features.preorder_system ? 'active' : 'inactive'}">${features.preorder_system ? '✅' : '❌'} Pre-Orders</div>
+          <div class="feature-item ${features.price_protection ? 'active' : 'inactive'}">${features.price_protection ? '✅' : '❌'} Price Protection</div>
+          <div class="feature-item ${features.health_monitoring ? 'active' : 'inactive'}">${features.health_monitoring ? '✅' : '❌'} Health Monitoring</div>
+          <div class="feature-item ${features.subscription_acknowledgment ? 'active' : 'inactive'}">${features.subscription_acknowledgment ? '✅' : '❌'} Acknowledgment</div>
+        </div>
+      </div>
+    `;
+  }
+  
+  const tags = `
+    <span class="store-tag plugin">Plugin v${store.plugin_version || '?'}</span>
+    <span class="store-tag wc">WC ${store.woocommerce_version || '?'}</span>
+    ${alertCounts.errors > 0 ? `<span class="store-tag error">${alertCounts.errors} errors</span>` : ''}
+    ${alertCounts.disputes > 0 ? `<span class="store-tag dispute">${alertCounts.disputes} disputes</span>` : ''}
+    ${alertCounts.preorders > 0 ? `<span class="store-tag preorder">${alertCounts.preorders} pre-orders</span>` : ''}
+    ${alertCounts.price_adjustments > 0 ? `<span class="store-tag price">${alertCounts.price_adjustments} price adj.</span>` : ''}
+  `;
+  
+  const actions = isCompact ? '' : `
+    <div style="display: flex; gap: 8px; margin-top: 12px;">
+      <button class="btn btn-sm btn-outline" onclick="viewStore('${esc(store.id)}')">View Details</button>
+      <button class="btn btn-sm btn-danger" onclick="removeStore('${esc(store.id)}')">Remove</button>
+    </div>
+  `;
+  
+  return `
+    <div class="store-card">
+      <div class="store-header">
+        <div style="flex: 1;">
+          <div class="store-name">${esc(store.name)}</div>
+          <div class="store-url">${esc(store.url)}</div>
+          <div class="store-meta">${tags}</div>
+        </div>
+        <div>
+          ${store.consumerKey ? '<span class="badge badge-success">API Connected</span>' : '<span class="badge badge-warning">Plugin Only</span>'}
+        </div>
+      </div>
+      ${actions}
+      ${featureItems}
+    </div>
+  `;
+}
+
+function renderAlertItem(alert, isCompact = false, index = null) {
+  const time = new Date(alert.timestamp).toLocaleString();
+  const message = esc(alert.message.substring(0, isCompact ? 100 : 300));
+  const deleteBtn = index !== null ? `<button class="btn btn-sm btn-outline" onclick="deleteAlert(${index})" style="margin-left: 8px;">Delete</button>` : '';
+  
+  return `
+    <div class="alert-item ${alert.severity}">
+      <div style="flex: 1;">
+        <div class="alert-subject">${esc(alert.subject)}</div>
+        <div class="alert-message">${message}${alert.message.length > (isCompact ? 100 : 300) ? '...' : ''}</div>
+        <div class="alert-meta">
+          <span>${time}</span>
+          ${alert.siteId ? `<span>Store ID: ${esc(alert.siteId)}</span>` : ''}
+        </div>
+      </div>
+      ${!isCompact ? `<div style="display: flex; gap: 4px;">${deleteBtn}</div>` : ''}
+    </div>
+  `;
+}
+
+async function addStore(e) {
+  e.preventDefault();
+  const result = document.getElementById('addStoreResult');
+  const name = document.getElementById('storeName').value.trim();
+  const url = document.getElementById('storeUrl').value.trim();
+  const key = document.getElementById('storeKey').value.trim();
+  const secret = document.getElementById('storeSecret').value.trim();
+
+  result.textContent = 'Adding...';
+  result.style.color = '#666';
+
+  try {
+    const res = await fetch('/api/track-woo-error', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        type: 'plugin_activated',
+        store_name: name,
+        store_url: url,
+        store_id: 'manual-' + Date.now(),
+        plugin_version: 'manual',
+        woocommerce_version: 'N/A',
+        wordpress_version: 'N/A',
+        php_version: 'N/A',
+        timestamp: new Date().toISOString(),
+        consumerKey: key || undefined,
+        consumerSecret: secret || undefined
+      })
+    });
+
+    if (res.ok) {
+      result.textContent = '✅ Store added successfully!';
+      result.style.color = '#38a169';
+      document.getElementById('addStoreForm').reset();
+      setTimeout(() => { 
+        loadDashboard(); 
+        loadSitesConfig();
+        switchTab('stores');
+      }, 1500);
+    } else {
+      result.textContent = '❌ Failed to add store';
+      result.style.color = '#e53e3e';
+    }
+  } catch(err) {
+    result.textContent = '❌ Error: ' + err.message;
+    result.style.color = '#e53e3e';
+  }
+}
+
+async function removeStore(storeId) {
+  if (!confirm('Remove this store from monitoring? This will delete it from sites.json and stop all monitoring.')) return;
+  try {
+    const res = await fetch('/api/stores/remove', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({storeId})
+    });
+    const data = await res.json();
+    if (data.success) {
+      showNotification('Store removed successfully', 'success');
+      loadDashboard();
+    } else {
+      showNotification('Failed to remove store: ' + (data.error || 'Unknown error'), 'error');
+    }
+  } catch(e) { 
+    console.error(e); 
+    showNotification('Error: ' + e.message, 'error');
+  }
+}
+
+async function clearAlerts() {
+  if (!confirm('Clear ALL alerts? This action cannot be undone.')) return;
+  await fetch('/api/dashboard/clear-alerts', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+  showNotification('All alerts cleared', 'success');
+  loadDashboard();
+}
+
+async function deleteAlert(index) {
+  await fetch('/api/dashboard/alerts/'+index, {method:'DELETE'});
+  showNotification('Alert deleted', 'success');
+  loadDashboard();
+}
+
+async function loadSitesConfig() {
+  try {
+    const res = await fetch('/api/dashboard');
+    const data = await res.json();
+    const el = document.getElementById('sites-config');
+    if (data.stores.length === 0) {
+      el.textContent = '[ ] — No stores configured yet';
+    } else {
+      el.textContent = JSON.stringify(data.stores, null, 2);
+    }
+  } catch(e) {
+    document.getElementById('sites-config').textContent = 'Error loading configuration';
+  }
+}
+
+function viewStore(storeId) {
+  // TODO: Implement detailed store view
+  showNotification('Store details view coming soon', 'info');
+}
+
+function showNotification(message, type = 'info') {
+  // Simple notification
+  const notification = document.createElement('div');
+  notification.style.cssText = `
+    position: fixed;
+    top: 24px;
+    right: 24px;
+    padding: 16px 24px;
+    border-radius: 10px;
+    background: ${type === 'error' ? '#fed7d7' : type === 'success' ? '#c6f6d5' : '#bee3f8'};
+    color: ${type === 'error' ? '#742a2a' : type === 'success' ? '#22543d' : '#2a4365'};
+    font-weight: 600;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+    z-index: 1000;
+    max-width: 400px;
+    animation: slideIn 0.3s ease;
+  `;
+  notification.textContent = message;
+  document.body.appendChild(notification);
+  setTimeout(() => {
+    notification.style.animation = 'slideOut 0.3s ease forwards';
+    setTimeout(() => notification.remove(), 300);
+  }, 4000);
+}
+
+function esc(s) {
+  if (!s) return '';
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// Initial load
+loadDashboard();
+setInterval(loadDashboard, 30000); // Refresh every 30 seconds
+</script>
+</body>
+</html>

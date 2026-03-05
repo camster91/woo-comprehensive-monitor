@@ -2,30 +2,33 @@
 
 **One repo — everything you need.** WordPress plugin + Node.js monitoring server.
 
-- **Plugin** (v4.1.0) — install on your WooCommerce stores → [Download ZIP](https://github.com/camster91/woo-comprehensive-monitor/releases/latest)
-- **Server** — deployed to `https://woo.ashbi.ca` via Coolify (auto-deploys from `server/`)
+- **Plugin** (v4.4.8) — install on your WooCommerce stores → [Download v4.4.8 ZIP](https://github.com/camster91/woo-comprehensive-monitor/releases/tag/v4.4.8)
+- **Server** (v2.4.0) — deployed to `https://woo.ashbi.ca` via Coolify (auto-deploys from `server/`)
 
 ## Plugin Features
 
 | Feature | Description |
 |---------|-------------|
-| 🚨 Error Tracking | JS, AJAX, checkout error tracking → sent to central server |
+| 🚨 Error Tracking | JS, AJAX, checkout error tracking with suppression patterns & deduplication |
 | 🛡️ Dispute Protection | Stripe webhook integration, auto evidence generation, checkout acknowledgments |
-| 💰 Discount Recovery | Charges customers who cancel subscriptions early the price difference |
-| 💱 Price Diff Charger | Convert subscription→one-time purchase, charge the difference (any gateway) |
+| 🛡️ Subscription Price Protection | Unified charge engine for subscription→one-time conversions (replaces Discount Recovery + Price Diff Charger) |
 | 📦 Pre-Orders | Backorders = pre-orders. Card saved at checkout, charged on ship |
-| 🏥 Health Monitoring | 10+ checks (WooCommerce, Stripe, SSL, DB, server resources) |
+| 🏥 Health Monitoring | 15+ checks (WooCommerce, Stripe, SSL, DB, Action Scheduler, WP-Cron) |
+| 🧹 Action Scheduler Cleanup | One-click cleanup for failed WP-Cron tasks (handles 2351+ tasks) |
+| 🤖 Auto-Updater | GitHub release checking with backups, compatibility checks, rollback |
 | 📊 Admin Dashboard | 8 pages: Dashboard, Errors, Disputes, Acknowledgments, Recovery, Pre-Orders, Health, Settings |
 
 ## Server Features
 
 | Feature | Description |
 |---------|-------------|
-| 📡 Multi-Store Monitoring | Receives errors/alerts from all stores |
-| 🏪 Store Management | Add/remove/update stores via dashboard |
-| 📧 Email Alerts | Mailgun alerts for critical issues |
+| 📡 Multi-Store Monitoring | Receives errors/alerts from all stores with deduplication |
+| 🏪 Store Management | Add/remove/update stores via dashboard with statistics |
+| 📧 Smart Email Alerts | Diagnostic suggestions, severity levels, plugin version awareness |
 | 🔍 Deep Health Checks | Periodic health checks via WooCommerce REST API |
-| 📊 Dashboard | Web UI at `https://woo.ashbi.ca` |
+| 🤖 AI Chat Assistant | DeepSeek AI integration for troubleshooting (💬 DeepSeek Chat tab) |
+| 📊 Enhanced Dashboard | Modern UI with feature cards, store health scores, actionable fixes |
+| 🚨 Error Analytics | Error grouping, trends, occurrence tracking, suppression logic |
 
 ## Repo Structure
 
@@ -49,9 +52,10 @@ woo-comprehensive-monitor/
 │   ├── class-wcm-health-monitor.php
 │   ├── class-wcm-admin-dashboard.php
 │   ├── class-wcm-subscription-manager-wps.php
-│   ├── class-wcm-refund-recovery.php
+│   ├── class-wcm-subscription-protector.php
 │   ├── class-wcm-preorder.php
-│   └── class-wcm-price-diff-charger.php
+│   ├── class-wcm-auto-updater.php
+│   └── class-wcm-evidence-generator.php
 └── assets/css/, assets/js/
 ```
 

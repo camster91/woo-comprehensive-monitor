@@ -17,6 +17,13 @@ class WCM_Health_Monitor {
 
     private function init_hooks() {
         add_action( 'wcm_daily_health_check', array( $this, 'run_health_check' ) );
+        add_action( 'wp_ajax_wcm_fix_action_scheduler', array( $this, 'ajax_fix_action_scheduler' ) );
+        add_action( 'wp_ajax_wcm_fix_wp_cron', array( $this, 'ajax_fix_wp_cron' ) );
+        add_action( 'wp_ajax_wcm_review_stuck_orders', array( $this, 'ajax_review_stuck_orders' ) );
+        add_action( 'wp_ajax_wcm_review_overdue_subscriptions', array( $this, 'ajax_review_overdue_subscriptions' ) );
+        add_action( 'wp_ajax_wcm_configure_shipstation', array( $this, 'ajax_configure_shipstation' ) );
+        add_action( 'wp_ajax_wcm_configure_stripe_webhooks', array( $this, 'ajax_configure_stripe_webhooks' ) );
+        add_action( 'wp_ajax_wcm_enable_stripe_gateway', array( $this, 'ajax_enable_stripe_gateway' ) );
     }
 
     /**
@@ -50,6 +57,10 @@ class WCM_Health_Monitor {
         $checks[] = $this->check_server_resources();
         $checks[] = $this->check_api_connectivity();
         $checks[] = $this->check_shipping_tax();
+        $checks[] = $this->check_order_flow();
+        $checks[] = $this->check_subscription_timing();
+        $checks[] = $this->check_shipstation_integration();
+        $checks[] = $this->check_stripe_webhooks();
 
         // Allow other modules (like subscription manager) to add checks
         $checks = apply_filters( 'wcm_health_checks', $checks );
@@ -94,21 +105,37 @@ class WCM_Health_Monitor {
             'details' => array(),
         );
 
-        if ( ! class_exists( 'WC_Stripe' ) ) {
-            $check['status']                    = 'warning';
-            $check['details']['stripe_message'] = 'Stripe gateway plugin not active';
+        // Check for Stripe plugin classes (different versions)
+        $stripe_active = false;
+        $stripe_gateway_enabled = false;
+        
+        if ( class_exists( 'WC_Stripe' ) || class_exists( 'WC_Stripe_API' ) || class_exists( 'WooCommerce\\Stripe\\Gateway' ) ) {
+            $stripe_active = true;
+            $check['details']['plugin_active'] = 'Yes';
+            
+            // Check if Stripe gateway is enabled in WooCommerce settings
+            if ( function_exists( 'WC' ) && method_exists( WC(), 'payment_gateways' ) ) {
+                $gateways = WC()->payment_gateways()->payment_gateways();
+                if ( isset( $gateways['stripe'] ) ) {
+                    $check['details']['enabled'] = $gateways['stripe']->enabled === 'yes' ? 'Yes' : 'No';
+                    $stripe_gateway_enabled = $gateways['stripe']->enabled === 'yes';
+                    
+                    // Check test mode
+                    $stripe_settings = get_option( 'woocommerce_stripe_settings' );
+                    if ( $stripe_settings ) {
+                        $check['details']['test_mode'] = isset( $stripe_settings['testmode'] ) && 'yes' === $stripe_settings['testmode'] ? 'Yes' : 'No';
+                    }
+                }
+            }
+        } else {
+            $check['status'] = 'warning';
+            $check['details']['stripe_message'] = 'Stripe gateway plugin not installed or activated';
             return $check;
         }
 
-        $stripe_settings = get_option( 'woocommerce_stripe_settings' );
-        if ( $stripe_settings ) {
-            $check['details']['enabled']   = isset( $stripe_settings['enabled'] ) && 'yes' === $stripe_settings['enabled'] ? 'Yes' : 'No';
-            $check['details']['test_mode'] = isset( $stripe_settings['testmode'] ) && 'yes' === $stripe_settings['testmode'] ? 'Yes' : 'No';
-
-            if ( isset( $stripe_settings['enabled'] ) && 'yes' !== $stripe_settings['enabled'] ) {
-                $check['status']                    = 'critical';
-                $check['details']['stripe_message'] = 'Stripe gateway is DISABLED. Customers cannot pay.';
-            }
+        if ( ! $stripe_gateway_enabled ) {
+            $check['status'] = 'critical';
+            $check['details']['stripe_message'] = 'Stripe gateway is DISABLED in WooCommerce settings. Customers cannot pay.';
         }
 
         return $check;
@@ -285,6 +312,265 @@ class WCM_Health_Monitor {
         return $check;
     }
 
+    /**
+     * Check for stuck orders in the workflow
+     */
+    private function check_order_flow() {
+        $check = array(
+            'name'    => 'Order Flow',
+            'status'  => 'good',
+            'details' => array(),
+        );
+
+        if ( ! function_exists( 'wc_get_orders' ) ) {
+            $check['details']['error'] = 'WooCommerce not loaded';
+            return $check;
+        }
+
+        $now = current_time( 'mysql' );
+        $one_hour_ago = gmdate( 'Y-m-d H:i:s', strtotime( '-1 hour' ) );
+        $twentyfour_hours_ago = gmdate( 'Y-m-d H:i:s', strtotime( '-24 hours' ) );
+        $fortyeight_hours_ago = gmdate( 'Y-m-d H:i:s', strtotime( '-48 hours' ) );
+
+        // Orders stuck in "pending" >1 hour
+        $pending_orders = wc_get_orders( array(
+            'status'       => 'pending',
+            'date_created' => '<' . $one_hour_ago,
+            'limit'        => 20,
+            'return'       => 'ids',
+        ) );
+        
+        $check['details']['pending_stuck'] = count( $pending_orders );
+        if ( ! empty( $pending_orders ) ) {
+            $check['details']['pending_order_ids'] = implode( ', ', $pending_orders );
+        }
+
+        // Orders stuck in "processing" >24 hours
+        $processing_orders = wc_get_orders( array(
+            'status'       => 'processing',
+            'date_created' => '<' . $twentyfour_hours_ago,
+            'limit'        => 20,
+            'return'       => 'ids',
+        ) );
+        
+        $check['details']['processing_stuck'] = count( $processing_orders );
+        if ( ! empty( $processing_orders ) ) {
+            $check['details']['processing_order_ids'] = implode( ', ', $processing_orders );
+        }
+
+        // Orders stuck in "on-hold" >48 hours
+        $onhold_orders = wc_get_orders( array(
+            'status'       => 'on-hold',
+            'date_created' => '<' . $fortyeight_hours_ago,
+            'limit'        => 20,
+            'return'       => 'ids',
+        ) );
+        
+        $check['details']['onhold_stuck'] = count( $onhold_orders );
+        if ( ! empty( $onhold_orders ) ) {
+            $check['details']['onhold_order_ids'] = implode( ', ', $onhold_orders );
+        }
+
+        // Determine status based on stuck orders
+        $total_stuck = $check['details']['pending_stuck'] + $check['details']['processing_stuck'] + $check['details']['onhold_stuck'];
+        
+        if ( $total_stuck > 5 ) {
+            $check['status'] = 'critical';
+            $check['details']['message'] = $total_stuck . ' orders stuck in workflow';
+        } elseif ( $total_stuck > 0 ) {
+            $check['status'] = 'warning';
+            $check['details']['message'] = $total_stuck . ' orders stuck in workflow';
+        }
+
+        return $check;
+    }
+
+    /**
+     * Check subscription timing and renewals
+     */
+    private function check_subscription_timing() {
+        $check = array(
+            'name'    => 'Subscription Timing',
+            'status'  => 'good',
+            'details' => array(),
+        );
+
+        // Check WooCommerce Subscriptions if available
+        if ( function_exists( 'wcs_get_subscriptions' ) ) {
+            $now = current_time( 'timestamp' );
+            $seven_days_from_now = $now + ( 7 * DAY_IN_SECONDS );
+            
+            $subscription_args = array(
+                'subscriptions_per_page' => -1,
+                'subscription_status'    => array( 'active', 'pending-cancel' ),
+            );
+            
+            $subscriptions = wcs_get_subscriptions( $subscription_args );
+            
+            $overdue_renewals = 0;
+            $failed_renewals = 0;
+            $expiring_soon = 0;
+            $subscription_details = array();
+            
+            foreach ( $subscriptions as $subscription ) {
+                $next_payment = $subscription->get_time( 'next_payment' );
+                $end_date = $subscription->get_time( 'end' );
+                
+                // Overdue renewals (next payment was in the past)
+                if ( $next_payment && $next_payment < $now ) {
+                    $overdue_renewals++;
+                    $subscription_details[] = 'Subscription #' . $subscription->get_id() . ' overdue since ' . date_i18n( 'Y-m-d', $next_payment );
+                }
+                
+                // Failed renewals (check recent failed orders)
+                $related_orders = $subscription->get_related_orders();
+                $recent_failed = 0;
+                foreach ( $related_orders as $order_id ) {
+                    $order = wc_get_order( $order_id );
+                    if ( $order && 'failed' === $order->get_status() && strtotime( $order->get_date_created() ) > $now - ( 30 * DAY_IN_SECONDS ) ) {
+                        $recent_failed++;
+                    }
+                }
+                if ( $recent_failed >= 2 ) {
+                    $failed_renewals++;
+                }
+                
+                // Expiring soon (within 7 days)
+                if ( $end_date && $end_date > $now && $end_date < $seven_days_from_now ) {
+                    $expiring_soon++;
+                }
+            }
+            
+            $check['details']['total_subscriptions'] = count( $subscriptions );
+            $check['details']['overdue_renewals'] = $overdue_renewals;
+            $check['details']['failed_renewals'] = $failed_renewals;
+            $check['details']['expiring_soon'] = $expiring_soon;
+            
+            if ( $overdue_renewals > 0 ) {
+                $check['status'] = 'critical';
+                $check['details']['message'] = $overdue_renewals . ' subscription renewals overdue';
+            } elseif ( $failed_renewals > 0 ) {
+                $check['status'] = 'warning';
+                $check['details']['message'] = $failed_renewals . ' subscriptions with multiple failed renewals';
+            }
+            
+            if ( ! empty( $subscription_details ) ) {
+                $check['details']['subscription_details'] = $subscription_details;
+            }
+        } else {
+            $check['details']['message'] = 'WooCommerce Subscriptions not active';
+        }
+
+        return $check;
+    }
+
+    /**
+     * Check ShipStation integration health
+     */
+    private function check_shipstation_integration() {
+        $check = array(
+            'name'    => 'ShipStation Integration',
+            'status'  => 'good',
+            'details' => array(),
+        );
+
+        // Check if ShipStation plugin is active
+        $shipstation_active = class_exists( 'WC_ShipStation' ) || class_exists( 'WooCommerce\\ShipStation\\Integration' );
+        
+        if ( ! $shipstation_active ) {
+            $check['status'] = 'warning';
+            $check['details']['message'] = 'ShipStation plugin not detected';
+            $check['details']['plugin_active'] = 'No';
+            return $check;
+        }
+        
+        $check['details']['plugin_active'] = 'Yes';
+        
+        // Check last order export time (if we can determine it)
+        // This is a simple check - in production you might want to check API connectivity
+        $last_export = get_option( 'wc_shipstation_last_export', 0 );
+        
+        if ( $last_export ) {
+            $check['details']['last_export'] = date_i18n( 'Y-m-d H:i:s', $last_export );
+            $hours_since_export = ( current_time( 'timestamp' ) - $last_export ) / HOUR_IN_SECONDS;
+            
+            if ( $hours_since_export > 2 ) {
+                $check['status'] = 'warning';
+                $check['details']['message'] = 'No ShipStation export in last ' . round( $hours_since_export ) . ' hours';
+            }
+        } else {
+            $check['details']['last_export'] = 'Never';
+            $check['status'] = 'warning';
+            $check['details']['message'] = 'ShipStation has never exported orders';
+        }
+
+        return $check;
+    }
+
+    /**
+     * Check Stripe webhook health
+     */
+    private function check_stripe_webhooks() {
+        $check = array(
+            'name'    => 'Stripe Webhooks',
+            'status'  => 'good',
+            'details' => array(),
+        );
+
+        // Check if Stripe is active
+        if ( ! class_exists( 'WC_Stripe' ) && ! class_exists( 'WooCommerce\\Stripe\\Gateway' ) ) {
+            $check['details']['message'] = 'Stripe plugin not active';
+            return $check;
+        }
+        
+        // Check for recent webhook failures in Stripe logs
+        $stripe_settings = get_option( 'woocommerce_stripe_settings' );
+        if ( ! $stripe_settings ) {
+            $check['details']['message'] = 'Stripe settings not found';
+            return $check;
+        }
+        
+        // Check webhook endpoint URL
+        $site_url = home_url( '/' );
+        $webhook_url = isset( $stripe_settings['webhook_url'] ) ? $stripe_settings['webhook_url'] : '';
+        
+        if ( $webhook_url ) {
+            $check['details']['webhook_configured'] = 'Yes';
+            $check['details']['webhook_url'] = $webhook_url;
+            
+            // Basic check if webhook URL matches site URL
+            if ( false === strpos( $webhook_url, $site_url ) ) {
+                $check['status'] = 'warning';
+                $check['details']['message'] = 'Webhook URL may not match this site';
+            }
+        } else {
+            $check['details']['webhook_configured'] = 'No';
+            $check['status'] = 'warning';
+            $check['details']['message'] = 'Stripe webhook not configured';
+        }
+        
+        // Check for recent failed webhooks in order meta
+        $one_day_ago = gmdate( 'Y-m-d H:i:s', strtotime( '-1 day' ) );
+        $failed_webhook_orders = wc_get_orders( array(
+            'status'       => 'pending',
+            'date_created' => '<' . $one_day_ago,
+            'limit'        => 5,
+            'return'       => 'ids',
+        ) );
+        
+        if ( ! empty( $failed_webhook_orders ) ) {
+            $check['details']['potential_webhook_failures'] = count( $failed_webhook_orders );
+            $check['details']['potential_failed_order_ids'] = implode( ', ', $failed_webhook_orders );
+            
+            if ( $check['status'] !== 'critical' ) {
+                $check['status'] = 'warning';
+                $check['details']['message'] = 'Potential webhook failures detected';
+            }
+        }
+
+        return $check;
+    }
+
     private function log_health_check_results( $checks ) {
         global $wpdb;
         $table_name = $wpdb->prefix . 'wcm_health_logs';
@@ -397,5 +683,458 @@ class WCM_Health_Monitor {
         }
 
         return $stats;
+    }
+
+    /**
+     * AJAX: Fix Action Scheduler failed tasks
+     */
+    public function ajax_fix_action_scheduler() {
+        check_ajax_referer( 'wcm_admin', 'nonce' );
+        
+        if ( ! current_user_can( 'manage_woocommerce' ) ) {
+            wp_die( 'Unauthorized' );
+        }
+        
+        $results = $this->fix_action_scheduler();
+        
+        wp_send_json_success( array(
+            'message' => 'Action Scheduler cleanup completed',
+            'results' => $results,
+        ) );
+    }
+
+    /**
+     * AJAX: Fix WordPress Cron issues
+     */
+    public function ajax_fix_wp_cron() {
+        check_ajax_referer( 'wcm_admin', 'nonce' );
+        
+        if ( ! current_user_can( 'manage_woocommerce' ) ) {
+            wp_die( 'Unauthorized' );
+        }
+        
+        $results = $this->fix_wp_cron();
+        
+        wp_send_json_success( array(
+            'message' => 'WP-Cron fixes applied',
+            'results' => $results,
+        ) );
+    }
+
+    /**
+     * AJAX: Review stuck orders
+     */
+    public function ajax_review_stuck_orders() {
+        check_ajax_referer( 'wcm_admin', 'nonce' );
+        
+        if ( ! current_user_can( 'manage_woocommerce' ) ) {
+            wp_die( 'Unauthorized' );
+        }
+        
+        wp_send_json_success( array(
+            'message' => 'Redirecting to orders page',
+            'redirect' => admin_url( 'edit.php?post_type=shop_order' ),
+        ) );
+    }
+
+    /**
+     * AJAX: Review overdue subscriptions
+     */
+    public function ajax_review_overdue_subscriptions() {
+        check_ajax_referer( 'wcm_admin', 'nonce' );
+        
+        if ( ! current_user_can( 'manage_woocommerce' ) ) {
+            wp_die( 'Unauthorized' );
+        }
+        
+        wp_send_json_success( array(
+            'message' => 'Redirecting to subscriptions page',
+            'redirect' => admin_url( 'edit.php?post_type=shop_subscription' ),
+        ) );
+    }
+
+    /**
+     * AJAX: Configure ShipStation
+     */
+    public function ajax_configure_shipstation() {
+        check_ajax_referer( 'wcm_admin', 'nonce' );
+        
+        if ( ! current_user_can( 'manage_woocommerce' ) ) {
+            wp_die( 'Unauthorized' );
+        }
+        
+        wp_send_json_success( array(
+            'message' => 'Redirecting to ShipStation settings',
+            'redirect' => admin_url( 'admin.php?page=wc-settings&tab=integration&section=shipstation' ),
+        ) );
+    }
+
+    /**
+     * AJAX: Configure Stripe webhooks
+     */
+    public function ajax_configure_stripe_webhooks() {
+        check_ajax_referer( 'wcm_admin', 'nonce' );
+        
+        if ( ! current_user_can( 'manage_woocommerce' ) ) {
+            wp_die( 'Unauthorized' );
+        }
+        
+        wp_send_json_success( array(
+            'message' => 'Redirecting to Stripe settings',
+            'redirect' => admin_url( 'admin.php?page=wc-settings&tab=checkout&section=stripe' ),
+        ) );
+    }
+
+    /**
+     * AJAX: Enable Stripe gateway
+     */
+    public function ajax_enable_stripe_gateway() {
+        check_ajax_referer( 'wcm_admin', 'nonce' );
+        
+        if ( ! current_user_can( 'manage_woocommerce' ) ) {
+            wp_die( 'Unauthorized' );
+        }
+        
+        // Try to enable Stripe gateway programmatically
+        $gateways = WC()->payment_gateways()->payment_gateways();
+        if ( isset( $gateways['stripe'] ) ) {
+            $gateways['stripe']->update_option( 'enabled', 'yes' );
+            
+            wp_send_json_success( array(
+                'message' => 'Stripe gateway enabled successfully',
+                'redirect' => admin_url( 'admin.php?page=wc-settings&tab=checkout&section=stripe' ),
+            ) );
+        } else {
+            wp_send_json_error( array(
+                'message' => 'Stripe gateway not found',
+            ) );
+        }
+    }
+
+    /**
+     * Fix Action Scheduler failed tasks
+     */
+    public function fix_action_scheduler() {
+        $results = array(
+            'cleaned_failed' => 0,
+            'cleaned_old' => 0,
+            'total_before' => 0,
+            'total_after' => 0,
+            'batch_size' => 1000, // Clean in batches to avoid timeouts
+        );
+        
+        if ( ! class_exists( 'ActionScheduler' ) ) {
+            $results['error'] = 'Action Scheduler not available';
+            return $results;
+        }
+        
+        global $wpdb;
+        
+        // Get counts before cleanup
+        $results['total_before'] = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}actionscheduler_actions" );
+        $results['failed_before'] = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}actionscheduler_actions WHERE status = 'failed'" );
+        
+        // Check if we should use batch processing (more than 5000 tasks)
+        $use_batches = $results['failed_before'] > 5000;
+        
+        if ( $use_batches ) {
+            // Batch cleanup for large sites to avoid timeouts
+            $cutoff_date = gmdate( 'Y-m-d H:i:s', strtotime( '-7 days' ) );
+            $batch_limit = 1000;
+            $cleaned = 0;
+            
+            do {
+                $batch_cleaned = $wpdb->query( 
+                    $wpdb->prepare( 
+                        "DELETE FROM {$wpdb->prefix}actionscheduler_actions WHERE status = 'failed' AND scheduled_date_gmt < %s LIMIT %d",
+                        $cutoff_date,
+                        $batch_limit
+                    )
+                );
+                $cleaned += $batch_cleaned;
+                
+                // Small delay between batches to avoid overwhelming the server
+                if ( $batch_cleaned > 0 ) {
+                    usleep( 100000 ); // 0.1 second
+                }
+            } while ( $batch_cleaned > 0 );
+            
+            $results['cleaned_failed'] = $cleaned;
+            $results['batches_used'] = true;
+        } else {
+            // Single query for smaller sites
+            $cutoff_date = gmdate( 'Y-m-d H:i:s', strtotime( '-7 days' ) );
+            $failed_cleaned = $wpdb->query( 
+                $wpdb->prepare( 
+                    "DELETE FROM {$wpdb->prefix}actionscheduler_actions WHERE status = 'failed' AND scheduled_date_gmt < %s",
+                    $cutoff_date
+                )
+            );
+            $results['cleaned_failed'] = $failed_cleaned;
+        }
+        
+        // Clean up completed tasks older than 30 days (always batch for safety)
+        $cutoff_old = gmdate( 'Y-m-d H:i:s', strtotime( '-30 days' ) );
+        $batch_limit = 1000;
+        $old_cleaned = 0;
+        
+        do {
+            $batch_cleaned = $wpdb->query( 
+                $wpdb->prepare( 
+                    "DELETE FROM {$wpdb->prefix}actionscheduler_actions WHERE status IN ('complete', 'canceled') AND scheduled_date_gmt < %s LIMIT %d",
+                    $cutoff_old,
+                    $batch_limit
+                )
+            );
+            $old_cleaned += $batch_cleaned;
+            
+            if ( $batch_cleaned > 0 ) {
+                usleep( 100000 ); // 0.1 second
+            }
+        } while ( $batch_cleaned > 0 );
+        
+        $results['cleaned_old'] = $old_cleaned;
+        
+        // Get counts after cleanup
+        $results['total_after'] = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}actionscheduler_actions" );
+        $results['failed_after'] = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}actionscheduler_actions WHERE status = 'failed'" );
+        
+        // If DISABLE_WP_CRON is true, add a warning
+        if ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON ) {
+            $results['cron_warning'] = 'DISABLE_WP_CRON is true. External cron job required for scheduled tasks.';
+        }
+        
+        // Check if there are still recent failed tasks (last 7 days)
+        $recent_cutoff = gmdate( 'Y-m-d H:i:s', strtotime( '-1 day' ) );
+        $recent_failed = (int) $wpdb->get_var( 
+            $wpdb->prepare( 
+                "SELECT COUNT(*) FROM {$wpdb->prefix}actionscheduler_actions WHERE status = 'failed' AND scheduled_date_gmt >= %s",
+                $recent_cutoff
+            )
+        );
+        
+        if ( $recent_failed > 0 ) {
+            $results['recent_failed'] = $recent_failed;
+            $results['warning'] = $recent_failed . ' tasks failed in the last 24 hours. WP-Cron may still be broken.';
+        }
+        
+        // Log the cleanup
+        $this->log_health_check_results( array(
+            array(
+                'name' => 'Action Scheduler Cleanup',
+                'status' => 'good',
+                'details' => array(
+                    'failed_cleaned' => $results['cleaned_failed'],
+                    'old_cleaned' => $results['cleaned_old'],
+                    'total_before' => $results['total_before'],
+                    'total_after' => $results['total_after'],
+                    'recent_failed' => isset( $results['recent_failed'] ) ? $results['recent_failed'] : 0,
+                ),
+            ),
+        ) );
+        
+        // Send email notification for large cleanups
+        if ( $results['cleaned_failed'] > 100 || $results['cleaned_old'] > 1000 ) {
+            $this->send_cleanup_notification( $results );
+        }
+        
+        return $results;
+    }
+    
+    /**
+     * Send email notification for large cleanups
+     */
+    private function send_cleanup_notification( $results ) {
+        $alert_email = get_option( 'wcm_alert_email', 'cameron@ashbi.ca' );
+        $site_name = get_bloginfo( 'name' );
+        $site_url = get_site_url();
+        
+        $subject = sprintf( '[%s] Action Scheduler Cleanup Completed', $site_name );
+        
+        $message = sprintf(
+            "Action Scheduler cleanup completed on %s (%s)\n\n",
+            $site_name,
+            $site_url
+        );
+        
+        $message .= sprintf( "Total tasks before cleanup: %d\n", $results['total_before'] );
+        $message .= sprintf( "Failed tasks cleaned: %d\n", $results['cleaned_failed'] );
+        $message .= sprintf( "Old tasks cleaned: %d\n", $results['cleaned_old'] );
+        $message .= sprintf( "Total tasks after cleanup: %d\n", $results['total_after'] );
+        
+        if ( isset( $results['recent_failed'] ) && $results['recent_failed'] > 0 ) {
+            $message .= sprintf( "\n⚠️ Warning: %d tasks failed in the last 24 hours.\n", $results['recent_failed'] );
+            $message .= "WP-Cron may still be broken. Check Health Checks page for details.\n";
+        }
+        
+        if ( isset( $results['cron_warning'] ) ) {
+            $message .= sprintf( "\nℹ️ Note: %s\n", $results['cron_warning'] );
+        }
+        
+        $message .= "\n--\n";
+        $message .= "WooCommerce Comprehensive Monitor v" . WCM_VERSION . "\n";
+        
+        wp_mail( $alert_email, $subject, $message );
+    }
+
+    /**
+     * Fix WordPress Cron issues
+     */
+    public function fix_wp_cron() {
+        $results = array(
+            'cron_enabled' => true,
+            'spawn_called' => false,
+            'scheduled_events' => array(),
+        );
+        
+        // Check if DISABLE_WP_CRON is set
+        if ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON ) {
+            $results['cron_enabled'] = false;
+            $results['warning'] = 'DISABLE_WP_CRON is true. External cron job required.';
+        }
+        
+        // Try to spawn cron (non-blocking)
+        $cron_spawn = wp_remote_post( 
+            admin_url( 'admin-ajax.php' ), 
+            array(
+                'timeout' => 0.01,
+                'blocking' => false,
+                'sslverify' => false,
+                'body' => array( 'action' => 'wp-cron' ),
+            )
+        );
+        
+        $results['spawn_called'] = ! is_wp_error( $cron_spawn );
+        
+        // Get scheduled events
+        $cron_events = _get_cron_array();
+        $results['scheduled_events'] = is_array( $cron_events ) ? count( $cron_events ) : 0;
+        
+        // Reschedule our own health check if missing
+        if ( ! wp_next_scheduled( 'wcm_daily_health_check' ) ) {
+            wp_schedule_event( time(), 'hourly', 'wcm_daily_health_check' );
+            $results['rescheduled_health_check'] = true;
+        }
+        
+        // Reschedule dispute check if missing
+        if ( ! wp_next_scheduled( 'wcm_hourly_dispute_check' ) ) {
+            wp_schedule_event( time(), 'hourly', 'wcm_hourly_dispute_check' );
+            $results['rescheduled_dispute_check'] = true;
+        }
+        
+        // Reschedule log cleanup if missing
+        if ( ! wp_next_scheduled( 'wcm_daily_log_cleanup' ) ) {
+            wp_schedule_event( time(), 'daily', 'wcm_daily_log_cleanup' );
+            $results['rescheduled_log_cleanup'] = true;
+        }
+        
+        return $results;
+    }
+
+    /**
+     * Get actionable fixes for health issues
+     */
+    public function get_actionable_fixes( $health_checks ) {
+        $fixes = array();
+        
+        foreach ( $health_checks as $check ) {
+            if ( $check['status'] === 'critical' || $check['status'] === 'warning' ) {
+                switch ( $check['name'] ) {
+                    case 'Action Scheduler':
+                        if ( isset( $check['details']['failed_actions'] ) && $check['details']['failed_actions'] > 10 ) {
+                            $fixes[] = array(
+                                'name' => 'Action Scheduler',
+                                'issue' => $check['details']['failed_actions'] . ' failed tasks',
+                                'action' => 'fix_action_scheduler',
+                                'button_text' => 'Clean Failed Tasks',
+                                'description' => 'Clean up failed Action Scheduler tasks older than 7 days.',
+                            );
+                        }
+                        break;
+                        
+                    case 'WordPress Cron':
+                        if ( isset( $check['details']['cron_enabled'] ) && strpos( $check['details']['cron_enabled'], 'No' ) !== false ) {
+                            $fixes[] = array(
+                                'name' => 'WordPress Cron',
+                                'issue' => 'WP-Cron disabled',
+                                'action' => 'fix_wp_cron',
+                                'button_text' => 'Fix WP-Cron',
+                                'description' => 'Check and reschedule cron events.',
+                            );
+                        }
+                        break;
+                        
+                    case 'Stripe Gateway':
+                        if ( isset( $check['details']['stripe_message'] ) && strpos( $check['details']['stripe_message'], 'DISABLED' ) !== false ) {
+                            $fixes[] = array(
+                                'name' => 'Stripe Gateway',
+                                'issue' => 'Stripe gateway disabled',
+                                'action' => 'enable_stripe_gateway',
+                                'button_text' => 'Enable Stripe',
+                                'description' => 'Enable Stripe gateway in WooCommerce settings.',
+                                'external_link' => admin_url( 'admin.php?page=wc-settings&tab=checkout&section=stripe' ),
+                            );
+                        }
+                        break;
+                        
+                    case 'Order Flow':
+                        if ( isset( $check['details']['pending_stuck'] ) || isset( $check['details']['processing_stuck'] ) || isset( $check['details']['onhold_stuck'] ) ) {
+                            $total_stuck = ( $check['details']['pending_stuck'] ?? 0 ) + ( $check['details']['processing_stuck'] ?? 0 ) + ( $check['details']['onhold_stuck'] ?? 0 );
+                            if ( $total_stuck > 0 ) {
+                                $fixes[] = array(
+                                    'name' => 'Order Flow',
+                                    'issue' => $total_stuck . ' stuck orders',
+                                    'action' => 'review_stuck_orders',
+                                    'button_text' => 'Review Orders',
+                                    'description' => 'Review orders stuck in workflow (pending >1h, processing >24h, on-hold >48h).',
+                                    'external_link' => admin_url( 'edit.php?post_type=shop_order' ),
+                                );
+                            }
+                        }
+                        break;
+                        
+                    case 'Subscription Timing':
+                        if ( isset( $check['details']['overdue_renewals'] ) && $check['details']['overdue_renewals'] > 0 ) {
+                            $fixes[] = array(
+                                'name' => 'Subscription Timing',
+                                'issue' => $check['details']['overdue_renewals'] . ' overdue renewals',
+                                'action' => 'review_overdue_subscriptions',
+                                'button_text' => 'Review Subscriptions',
+                                'description' => 'Review subscription renewals that are overdue.',
+                                'external_link' => admin_url( 'edit.php?post_type=shop_subscription' ),
+                            );
+                        }
+                        break;
+                        
+                    case 'ShipStation Integration':
+                        if ( isset( $check['details']['message'] ) && strpos( $check['details']['message'], 'Never' ) !== false ) {
+                            $fixes[] = array(
+                                'name' => 'ShipStation Integration',
+                                'issue' => 'No exports ever',
+                                'action' => 'configure_shipstation',
+                                'button_text' => 'Configure ShipStation',
+                                'description' => 'Configure ShipStation plugin for order exports.',
+                                'external_link' => admin_url( 'admin.php?page=wc-settings&tab=integration&section=shipstation' ),
+                            );
+                        }
+                        break;
+                        
+                    case 'Stripe Webhooks':
+                        if ( isset( $check['details']['webhook_configured'] ) && 'No' === $check['details']['webhook_configured'] ) {
+                            $fixes[] = array(
+                                'name' => 'Stripe Webhooks',
+                                'issue' => 'Webhook not configured',
+                                'action' => 'configure_stripe_webhooks',
+                                'button_text' => 'Configure Webhooks',
+                                'description' => 'Configure Stripe webhooks for payment processing.',
+                                'external_link' => admin_url( 'admin.php?page=wc-settings&tab=checkout&section=stripe' ),
+                            );
+                        }
+                        break;
+                }
+            }
+        }
+        
+        return $fixes;
     }
 }

@@ -119,6 +119,24 @@ class WCM_Error_Tracker {
 
     private function log_error( $error_type, $error_message, $page_url, $user_agent, $customer_email, $order_id ) {
         global $wpdb;
+        
+        // Check if error should be suppressed based on patterns
+        if ( $this->should_suppress_error( $error_message ) ) {
+            return false;
+        }
+        
+        // Check for duplicate error in the last 5 minutes to avoid flooding
+        $error_hash = md5( $error_type . $error_message . $page_url );
+        $duplicate_key = 'wcm_err_dup_' . $error_hash;
+        
+        // If same error occurred in last 5 minutes, skip logging (but still send to monitoring server)
+        if ( get_transient( $duplicate_key ) ) {
+            return false;
+        }
+        
+        // Set transient for 5 minutes to prevent duplicate logging
+        set_transient( $duplicate_key, true, 5 * MINUTE_IN_SECONDS );
+        
         $wpdb->insert( $wpdb->prefix . 'wcm_error_logs', array(
             'error_type'     => $error_type,
             'error_message'  => $error_message,
@@ -128,6 +146,28 @@ class WCM_Error_Tracker {
             'order_id'       => $order_id,
             'created_at'     => current_time( 'mysql' ),
         ) );
+        
+        return true;
+    }
+    
+    /**
+     * Check if error should be suppressed based on patterns
+     */
+    private function should_suppress_error( $error_message ) {
+        $suppression_patterns = get_option( 'wcm_suppress_error_patterns', '' );
+        if ( empty( $suppression_patterns ) ) {
+            return false;
+        }
+        
+        $patterns = explode( "\n", $suppression_patterns );
+        foreach ( $patterns as $pattern ) {
+            $pattern = trim( $pattern );
+            if ( ! empty( $pattern ) && false !== stripos( $error_message, $pattern ) ) {
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     private function send_to_monitoring_server( $error_type, $error_message, $page_url, $user_agent, $customer_email, $order_id ) {
@@ -136,22 +176,55 @@ class WCM_Error_Tracker {
             return;
         }
 
-        wp_remote_post( $server, array(
-            'method'   => 'POST',
-            'timeout'  => 5,
-            'blocking' => false,
-            'headers'  => array( 'Content-Type' => 'application/json' ),
-            'body'     => wp_json_encode( array(
-                'type'           => $error_type,
-                'error_message'  => $error_message,
-                'site'           => home_url(),
-                'url'            => $page_url,
-                'user_agent'     => $user_agent,
-                'customer_email' => $customer_email,
-                'order_id'       => $order_id,
-                'time'           => current_time( 'mysql' ),
-            ) ),
-        ) );
+        $payload = array(
+            'type'           => $error_type,
+            'error_message'  => $error_message,
+            'site'           => home_url(),
+            'url'            => $page_url,
+            'user_agent'     => $user_agent,
+            'customer_email' => $customer_email,
+            'order_id'       => $order_id,
+            'time'           => current_time( 'mysql' ),
+        );
+
+        // Try to send with retry logic
+        $max_retries = 2;
+        $retry_delay = 1; // seconds
+        
+        for ( $attempt = 1; $attempt <= $max_retries; $attempt++ ) {
+            $response = wp_remote_post( $server, array(
+                'method'   => 'POST',
+                'timeout'  => 5,
+                'blocking' => false, // Non-blocking for first attempt
+                'headers'  => array( 'Content-Type' => 'application/json' ),
+                'body'     => wp_json_encode( $payload ),
+            ) );
+            
+            // If non-blocking, we can't check response
+            if ( $attempt === 1 ) {
+                break; // First attempt is non-blocking
+            }
+            
+            // For retries, use blocking to check
+            if ( ! is_wp_error( $response ) ) {
+                $code = wp_remote_retrieve_response_code( $response );
+                if ( $code >= 200 && $code < 300 ) {
+                    // Success
+                    return;
+                }
+            }
+            
+            // Wait before retry
+            if ( $attempt < $max_retries ) {
+                sleep( $retry_delay );
+                $retry_delay *= 2; // Exponential backoff
+            }
+        }
+        
+        // If we get here and have retries enabled, log the failure
+        if ( $max_retries > 1 ) {
+            error_log( '[WCM] Failed to send error to monitoring server after ' . $max_retries . ' attempts: ' . $error_type );
+        }
     }
 
     // ================================================================
@@ -330,5 +403,78 @@ class WCM_Error_Tracker {
             "SELECT * FROM {$wpdb->prefix}wcm_error_logs ORDER BY created_at DESC LIMIT %d",
             $limit
         ) );
+    }
+
+    /**
+     * Get error groups (similar errors grouped together)
+     */
+    public function get_error_groups( $days = 7, $min_occurrences = 2 ) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'wcm_error_logs';
+        $cutoff = gmdate( 'Y-m-d H:i:s', strtotime( "-{$days} days" ) );
+        
+        // Group by error message and page URL pattern
+        return $wpdb->get_results( $wpdb->prepare(
+            "SELECT 
+                error_type,
+                SUBSTRING(error_message, 1, 100) as error_snippet,
+                COUNT(*) as occurrences,
+                MIN(created_at) as first_seen,
+                MAX(created_at) as last_seen,
+                GROUP_CONCAT(DISTINCT page_url) as urls
+            FROM {$table} 
+            WHERE created_at >= %s
+            GROUP BY error_type, SUBSTRING(error_message, 1, 100)
+            HAVING occurrences >= %d
+            ORDER BY occurrences DESC
+            LIMIT 50",
+            $cutoff,
+            $min_occurrences
+        ) );
+    }
+
+    /**
+     * Get error trends over time
+     */
+    public function get_error_trends( $days = 30 ) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'wcm_error_logs';
+        $cutoff = gmdate( 'Y-m-d H:i:s', strtotime( "-{$days} days" ) );
+        
+        return $wpdb->get_results( $wpdb->prepare(
+            "SELECT 
+                DATE(created_at) as date,
+                COUNT(*) as count,
+                SUM(CASE WHEN error_type = 'javascript_error' THEN 1 ELSE 0 END) as js_errors,
+                SUM(CASE WHEN error_type = 'checkout_error' THEN 1 ELSE 0 END) as checkout_errors,
+                SUM(CASE WHEN error_type = 'ajax_add_to_cart_error' THEN 1 ELSE 0 END) as ajax_errors
+            FROM {$table}
+            WHERE created_at >= %s
+            GROUP BY DATE(created_at)
+            ORDER BY date DESC
+            LIMIT 30",
+            $cutoff
+        ) );
+    }
+
+    /**
+     * Clear old errors based on retention setting
+     */
+    public function cleanup_old_errors() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'wcm_error_logs';
+        $retention_days = get_option( 'wcm_log_retention_days', 30 );
+        
+        if ( $retention_days < 1 ) {
+            return 0;
+        }
+        
+        $cutoff = gmdate( 'Y-m-d H:i:s', strtotime( "-{$retention_days} days" ) );
+        $deleted = $wpdb->query( $wpdb->prepare(
+            "DELETE FROM {$table} WHERE created_at < %s",
+            $cutoff
+        ) );
+        
+        return $deleted;
     }
 }

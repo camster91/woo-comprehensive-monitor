@@ -6,6 +6,7 @@ const cron = require("node-cron");
 const WooCommerceRestApi = require("@woocommerce/woocommerce-rest-api").default;
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 
 // WP Subscription Integration
 const {
@@ -17,6 +18,17 @@ const {
 let sites = [];
 let wpsMonitors = [];
 let alertHistory = [];
+
+// Error tracking for deduplication and analytics
+let errorCounts = {}; // key -> count
+let lastAlertTimes = {}; // key -> timestamp
+
+// Authentication store (in-memory, reset on server restart)
+let authCodes = {}; // email -> { code, expires }
+let authTokens = {}; // token -> { email, expires }
+const AUTH_SECRET = process.env.AUTH_SECRET || crypto.randomBytes(32).toString('hex');
+const ALLOWED_EMAILS = process.env.ALLOWED_EMAILS ? process.env.ALLOWED_EMAILS.split(',') : ['cameron@ashbi.ca'];
+const REQUIRE_AUTH = process.env.REQUIRE_AUTH !== 'false'; // default true
 
 try {
   if (fs.existsSync("./sites.json")) {
@@ -79,6 +91,59 @@ const apiKeyMiddleware = (req, res, next) => {
 };
 
 app.use(apiKeyMiddleware);
+
+// Authentication middleware for dashboard access
+const authMiddleware = (req, res, next) => {
+  // Skip auth if not required
+  if (!REQUIRE_AUTH) {
+    return next();
+  }
+  
+  // Allow auth endpoints without authentication
+  if (req.path.startsWith('/api/auth/')) {
+    return next();
+  }
+  
+  // Allow plugin download without auth
+  if (req.path === '/download/plugin') {
+    return next();
+  }
+  
+  // Allow health endpoint without auth
+  if (req.path === '/api/health') {
+    return next();
+  }
+  
+  // Check for valid token (from header or query parameter)
+  const token = req.headers['x-auth-token'] || req.query.authToken;
+  
+  if (!token || !authTokens[token]) {
+    // For API endpoints, return 401
+    if (req.path.startsWith('/api/')) {
+      return res.status(401).json({ error: 'Authentication required', loginUrl: '/dashboard' });
+    }
+    // For HTML pages, redirect to login
+    // We'll handle this in the dashboard route itself
+    return next();
+  }
+  
+  // Check token expiry
+  const authData = authTokens[token];
+  if (authData.expires < Date.now()) {
+    delete authTokens[token];
+    if (req.path.startsWith('/api/')) {
+      return res.status(401).json({ error: 'Token expired', loginUrl: '/dashboard' });
+    }
+    return next();
+  }
+  
+  // Token is valid, attach user to request
+  req.user = authData.email;
+  next();
+};
+
+// Apply auth middleware to all routes (except static assets)
+app.use(authMiddleware);
 
 // ==========================================
 // 1. EMAIL ALERTING SYSTEM (Mailgun API)
@@ -282,12 +347,102 @@ app.post("/api/track-woo-error", async (req, res) => {
   }
 
   // --- Regular frontend error tracking ---
-  const subject = `Frontend Issue on ${site}: ${type}`;
-  const message = `A customer just hit a frontend issue!\nSite: ${site}\nURL: ${url || 'Unknown'}\nError Type: ${type}\nError Message: ${error_message}\nTime: ${time || new Date().toISOString()}`;
+  
+  // Find store by URL for plugin version and ID
+  const siteObj = sites.find(s => s.url.includes(site) || (site && site.includes(s.url)));
+  const storeId = siteObj?.id;
+  const pluginVersion = storeId ? storeStats[storeId]?.plugin_version : 'unknown';
+  
+  // Store error for analytics and deduplication
+  const errorKey = `error_${site}_${type}_${error_message.substring(0, 50).replace(/\s+/g, '_')}`;
+  const errorCount = errorCounts[errorKey] || 0;
+  errorCounts[errorKey] = errorCount + 1;
+  
+  // Determine severity based on error type and count
+  let severity = "high";
+  let category = "Frontend Issue";
+  
+  if (type === 'javascript_error') {
+    // Check for common jQuery errors
+    if (error_message.includes('jQuery') || error_message.includes('$ is not defined') || error_message.includes('Cannot read property')) {
+      category = "jQuery Compatibility Issue";
+    } else if (error_message.includes('Uncaught TypeError')) {
+      category = "JavaScript Type Error";
+    }
+    
+    // If this error has occurred many times, lower severity (likely a known issue)
+    if (errorCount > 10) {
+      severity = "medium";
+    }
+  } else if (type === 'checkout_error') {
+    category = "Checkout Error";
+    severity = "critical"; // Checkout errors are critical
+  } else if (type === 'ajax_add_to_cart_error') {
+    category = "Add to Cart Error";
+    severity = "high";
+  }
+  
+  const subject = `${category} on ${site}: ${type}`;
+  let message = `A customer just hit a frontend issue!\n\n`;
+  message += `Site: ${site}\n`;
+  message += `URL: ${url || 'Unknown'}\n`;
+  message += `Error Type: ${type}\n`;
+  message += `Error Message: ${error_message}\n`;
+  message += `Time: ${time || new Date().toISOString()}\n`;
+  message += `Occurrences: ${errorCount} (including this one)\n\n`;
+  
+  // Add diagnostic suggestions based on error type
+  message += `--- DIAGNOSTIC SUGGESTIONS ---\n`;
+  
+  if (type === 'javascript_error') {
+    message += `1. Check for jQuery conflicts with other plugins/themes\n`;
+    message += `2. Test with default theme and disabled plugins\n`;
+    message += `3. Clear browser and WordPress cache\n`;
+    message += `4. Check browser console for full error details\n`;
+  } else if (type === 'checkout_error') {
+    message += `1. Test checkout with different payment methods\n`;
+    message += `2. Check WooCommerce error logs\n`;
+    message += `3. Verify payment gateway settings\n`;
+    message += `4. Test with a simple product\n`;
+  } else if (type === 'ajax_add_to_cart_error') {
+    message += `1. Check product stock and variations\n`;
+    message += `2. Test with different browsers\n`;
+    message += `3. Check for JavaScript conflicts\n`;
+    message += `4. Verify product pricing and settings\n`;
+  }
+  
+  message += `\n--- NEXT STEPS ---\n`;
+  message += `1. View error details in dashboard: https://woo.ashbi.ca/dashboard\n`;
+  message += `2. Use AI Chat for diagnosis: https://woo.ashbi.ca/dashboard → "💬 DeepSeek Chat"\n`;
+  message += `3. Check WordPress error logs: wp-content/debug.log\n`;
+  message += `4. Update plugin to latest version (currently ${pluginVersion})\n`;
+  
+  // If error has occurred many times, suggest suppression
+  if (errorCount > 20) {
+    message += `\n⚠️ This error has occurred ${errorCount} times. Consider:\n`;
+    message += `- Adding error suppression in plugin settings\n`;
+    message += `- Investigating root cause with developer\n`;
+    message += `- Checking for plugin conflicts\n`;
+  }
 
   try {
-    const siteObj = sites.find(s => s.url.includes(site) || (site && site.includes(s.url)));
-    await sendAlert(subject, message, siteObj ? siteObj.id : null, "high");
+    
+    // Only send alert if:
+    // 1. First occurrence, OR
+    // 2. Critical/High severity, OR  
+    // 3. Been more than 1 hour since last alert for this error
+    const lastAlertKey = `last_alert_${errorKey}`;
+    const lastAlertTime = lastAlertTimes[lastAlertKey] || 0;
+    const now = Date.now();
+    const oneHour = 60 * 60 * 1000;
+    
+    if (errorCount === 1 || severity === "critical" || severity === "high" || (now - lastAlertTime) > oneHour) {
+      await sendAlert(subject, message, siteObj ? siteObj.id : null, severity);
+      lastAlertTimes[lastAlertKey] = now;
+    } else {
+      console.log(`[Frontend Error] Skipping alert for ${errorKey} (occurrence ${errorCount}, last alert ${Math.round((now - lastAlertTime) / 1000 / 60)} minutes ago)`);
+    }
+    
     return res.status(200).json({ success: true });
   } catch (error) {
     console.error(`[Frontend Error] Failed to send alert:`, error.message);
@@ -302,7 +457,7 @@ app.get("/api/health", (req, res) => {
   res.status(200).json({
     status: "ok",
     timestamp: new Date().toISOString(),
-    version: "2.3.1",
+    version: "2.4.0",
     features: {
       frontend_monitoring: true,
       backend_health_checks: sites.length > 0,
@@ -439,7 +594,7 @@ app.get("/api/dashboard", (req, res) => {
   res.status(200).json({
     status: "ok",
     timestamp: new Date().toISOString(),
-    version: "2.3.1",
+    version: "2.4.0",
     overview: {
       totalSites: sites.length,
       criticalAlerts: alertHistory.filter(a => a.severity === "critical").length,
@@ -572,20 +727,447 @@ app.delete("/api/dashboard/alerts/:index", (req, res) => {
 });
 
 // ==========================================
-// 5. DASHBOARD HTML
+// 5. DEEPSEEK AI CHAT ENDPOINT
+// ==========================================
+app.post("/api/chat/deepseek", async (req, res) => {
+  try {
+    const { question, storeData, chatHistory } = req.body;
+    
+    if (!question || typeof question !== 'string') {
+      return res.status(400).json({ error: "Question is required" });
+    }
+    
+    // Check if we have a DeepSeek API key
+    const deepseekApiKey = process.env.DEEPSEEK_API_KEY;
+    const useMock = !deepseekApiKey || process.env.USE_MOCK_AI === 'true';
+    
+    let response;
+    
+    if (useMock) {
+      // Mock AI response based on question and store data
+      response = generateMockAIResponse(question, storeData, chatHistory);
+    } else {
+      // Real DeepSeek API call
+      response = await callDeepSeekAPI(question, storeData, chatHistory, deepseekApiKey);
+    }
+    
+    res.status(200).json({ response });
+    
+  } catch (error) {
+    console.error('DeepSeek chat error:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
+// Mock AI response generator
+function generateMockAIResponse(question, storeData, chatHistory) {
+  const lowerQuestion = question.toLowerCase();
+  
+  // Analyze store data if available
+  let storeAnalysis = '';
+  if (storeData) {
+    const { store, alerts, adminNotices, pluginVersion } = storeData;
+    
+    // Check for common issues
+    const criticalAlerts = alerts.filter(a => a.severity === 'critical');
+    const stripeNotices = adminNotices.filter(n => n.type && n.type.includes('stripe'));
+    const hasActionSchedulerErrors = alerts.some(a => 
+      a.message && a.message.includes('Action Scheduler') && a.message.includes('failed')
+    );
+    
+    storeAnalysis = `\n\n**Store Analysis (${store.name}):**\n`;
+    storeAnalysis += `- Plugin version: ${pluginVersion}\n`;
+    
+    if (criticalAlerts.length > 0) {
+      storeAnalysis += `- ⚠️ ${criticalAlerts.length} critical alerts\n`;
+    }
+    
+    if (stripeNotices.length > 0) {
+      storeAnalysis += `- 💳 Stripe issues detected: ${stripeNotices.length} notice(s)\n`;
+    }
+    
+    if (hasActionSchedulerErrors) {
+      storeAnalysis += `- ⏰ Action Scheduler/WP-Cron may be broken\n`;
+    }
+    
+    if (pluginVersion && pluginVersion.startsWith('4.4.')) {
+      storeAnalysis += `- ✅ Plugin is up to date (v${pluginVersion})\n`;
+    }
+  }
+  
+  // Common question patterns
+  if (lowerQuestion.includes('stripe') && lowerQuestion.includes('not active')) {
+    return `**Stripe "Not Active" Warning Fix**${storeAnalysis}
+
+This warning appears when:
+1. **Stripe Gateway plugin is not installed** – Install "WooCommerce Stripe Payment Gateway" from WordPress.org
+2. **Stripe gateway is disabled** – Go to WooCommerce → Settings → Payments → Stripe → Enable
+3. **Plugin version mismatch** – Ensure Stripe plugin is v10.4.0+
+
+**Steps to fix:**
+1. Check if Stripe plugin is installed (Plugins → Installed Plugins)
+2. If installed, enable it in WooCommerce Payments settings
+3. If missing, install from WordPress plugin repository
+4. After enabling, the warning should disappear within 1 hour
+
+The monitoring dashboard logs these warnings in "Admin Notices" for tracking.`;
+    
+  } else if (lowerQuestion.includes('action scheduler') || lowerQuestion.includes('wp-cron')) {
+    return `**Action Scheduler / WP-Cron Issues**${storeAnalysis}
+
+Action Scheduler is WooCommerce's background task system. When it fails:
+- Subscription renewals stop
+- Scheduled updates don't run  
+- Emails may not send
+
+**Common causes & fixes:**
+
+1. **WP-Cron disabled** – Check if \`DISABLE_WP_CRON\` is \`true\` in wp-config.php
+   - Fix: Set to \`false\` or use real cron: \`*/5 * * * * wget -q -O /dev/null https://your-site.com/wp-cron.php\`
+
+2. **Memory limits** – Increase PHP memory: \`define('WP_MEMORY_LIMIT', '256M');\`
+
+3. **Too many pending tasks** – Clear old tasks:
+   - Install "WP Crontrol" plugin
+   - Check WooCommerce → Status → Scheduled Actions
+   - Delete very old failed tasks
+
+4. **Hosting restrictions** – Some hosts block wp-cron
+   - Contact host to enable cron jobs
+
+**Immediate check:** Go to WooCommerce → Status → Scheduled Actions. Look for "Failed" tasks > 50.`;
+    
+  } else if (lowerQuestion.includes('fatal error') || lowerQuestion.includes('activation error')) {
+    return `**Plugin Activation Fatal Error**${storeAnalysis}
+
+Common causes when activating WooCommerce Comprehensive Monitor:
+
+1. **PHP version too low** – Requires PHP 7.4+, you have ${process.env.PHP_VERSION || 'unknown'}
+   - Fix: Upgrade PHP via hosting control panel
+
+2. **Missing WooCommerce** – Plugin requires WooCommerce 5.0+
+   - Fix: Install/activate WooCommerce first
+
+3. **Database table conflicts** – Previous plugin version left corrupted tables
+   - Fix: Deactivate, delete plugin, reinstall fresh
+
+4. **Store ID generation issue (v4.4.6)** – Recent fix for consistent store IDs
+   - Fix: Manually set \`wcm_store_id\` in wp_options table to: \`store-\` + first 8 chars of MD5(site URL)
+
+**Debug steps:**
+1. Check WordPress debug log: \`wp-content/debug.log\`
+2. Enable WP_DEBUG in wp-config.php
+3. Try manual plugin file replacement
+4. Contact support with the error message`;
+
+  } else if (lowerQuestion.includes('subscription') && lowerQuestion.includes('not renewing')) {
+    return `**Subscription Renewal Issues**${storeAnalysis}
+
+WooCommerce Subscriptions may fail to renew due to:
+
+1. **Payment method expired** – Customer's card declined or expired
+2. **WP-Cron broken** – Action Scheduler not running renewal hooks
+3. **Gateway restrictions** – Stripe may block recurring payments
+4. **Plugin conflicts** – Other plugins interfering with subscriptions
+
+**Checklist:**
+1. Verify WP-Cron is working (see Action Scheduler advice)
+2. Check Stripe logs in WooCommerce → Status → Logs
+3. Test with a sandbox subscription
+4. Ensure "WooCommerce Subscriptions" plugin is active and updated
+
+**Monitor solution:** The plugin's health checks should detect subscription renewal failures and alert you.`;
+    
+  } else if (lowerQuestion.includes('health check') || lowerQuestion.includes('monitor')) {
+    return `**Monitoring Dashboard Guide**${storeAnalysis}
+
+The WooCommerce Comprehensive Monitor provides:
+
+**1. Health Checks** (hourly)
+   - WooCommerce API connectivity
+   - Stripe gateway status
+   - Action Scheduler health
+   - Subscription renewal checks
+   - Failed order detection
+
+**2. Error Tracking**
+   - Frontend JavaScript errors
+   - Checkout AJAX failures
+   - PHP errors (via plugin logging)
+
+**3. Alert System**
+   - Email alerts to configured address
+   - Dashboard notifications
+   - Critical issue highlighting
+
+**4. Store Management**
+   - Auto-discovery of plugin installations
+   - Manual store addition with API keys
+   - Store statistics and version tracking
+
+**Common issues shown:**
+- 🔴 Critical: API disconnected, Action Scheduler broken
+- 🟡 Warning: Stripe disabled, failed orders detected
+- 🟢 Healthy: All systems operational
+
+Use the dashboard to monitor all your stores from one location!`;
+    
+  } else {
+    // General response
+    return `**WooCommerce AI Assistant**${storeAnalysis}
+
+I understand you're asking: "${question}"
+
+I'm an AI assistant integrated with your WooCommerce monitoring dashboard. I can help you:
+
+**Common Issues I Can Diagnose:**
+- Stripe payment gateway configuration problems
+- WP-Cron / Action Scheduler failures  
+- Plugin activation errors
+- Subscription renewal issues
+- WooCommerce API connectivity
+- Health check interpretations
+
+**To get better help:**
+1. Select a store from the dropdown above
+2. Enable "Include store data in analysis"
+3. Ask specific questions about errors or warnings
+
+**Example questions:**
+- "Why does my store show Stripe as not active?"
+- "How do I fix the Action Scheduler errors?"
+- "What does the health check 'critical' mean?"
+- "How do I enable subscription renewals?"
+
+For complex issues, I recommend checking WordPress error logs or consulting with a WooCommerce developer.`;
+  }
+}
+
+// Real DeepSeek API call (placeholder - needs implementation)
+async function callDeepSeekAPI(question, storeData, chatHistory, apiKey) {
+  // This would make actual API call to DeepSeek
+  // For now, use mock response
+  return generateMockAIResponse(question, storeData, chatHistory);
+}
+
+// ==========================================
+// 6. DASHBOARD HTML
 // ==========================================
 // Redirect root to dashboard
 app.get("/", (req, res) => res.redirect("/dashboard"));
 
 app.get("/dashboard", (req, res) => {
   try {
-    const dashboardPath = path.join(__dirname, 'dashboard-enhanced.html');
-    if (fs.existsSync(dashboardPath)) {
-      res.send(fs.readFileSync(dashboardPath, 'utf8'));
+    // Check authentication if required
+    if (REQUIRE_AUTH) {
+      const token = req.query.authToken;
+      const authData = token ? authTokens[token] : null;
+      
+      // Check if token is valid and not expired
+      if (!authData || authData.expires < Date.now()) {
+        // Serve login page
+        const loginPage = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WooMonitor Login</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0f2f5; color: #333; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .login-container { background: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+    h1 { text-align: center; margin-bottom: 24px; color: #2c3e50; font-size: 24px; }
+    .form-group { margin-bottom: 20px; }
+    label { display: block; font-weight: 600; margin-bottom: 8px; color: #555; }
+    input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; }
+    input:focus { outline: none; border-color: #3498db; box-shadow: 0 0 0 3px rgba(52,152,219,0.15); }
+    button { width: 100%; padding: 14px; background: #3498db; color: #fff; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+    button:hover { background: #2980b9; }
+    button:disabled { background: #95a5a6; cursor: not-allowed; }
+    .message { margin-top: 16px; padding: 12px; border-radius: 8px; text-align: center; font-size: 14px; }
+    .message.success { background: #d4edda; color: #155724; }
+    .message.error { background: #f8d7da; color: #721c24; }
+    .code-input { text-align: center; font-size: 20px; letter-spacing: 8px; }
+    .steps { display: none; }
+    .step { display: none; }
+    .step.active { display: block; }
+    .back-link { text-align: center; margin-top: 16px; }
+    .back-link a { color: #3498db; text-decoration: none; }
+    .back-link a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <h1>🔐 WooMonitor Login</h1>
+    
+    <div id="stepEmail" class="step active">
+      <div class="form-group">
+        <label for="email">Email Address</label>
+        <input type="email" id="email" placeholder="cameron@ashbi.ca" value="cameron@ashbi.ca">
+      </div>
+      <button id="sendCodeBtn">Send Login Code</button>
+      <div class="back-link">
+        <a href="/dashboard?authToken=skip" onclick="if(!confirm('Skip authentication? Dashboard will be publicly accessible.')) return false;">Skip authentication (not recommended)</a>
+      </div>
+    </div>
+    
+    <div id="stepCode" class="step">
+      <div class="form-group">
+        <label for="code">6‑Digit Code</label>
+        <input type="text" id="code" class="code-input" placeholder="000000" maxlength="6" pattern="\\d{6}">
+        <small>Check your email for the 6‑digit code. It expires in 10 minutes.</small>
+      </div>
+      <button id="verifyCodeBtn">Verify Code</button>
+      <div class="back-link">
+        <a href="#" id="backToEmail">← Use a different email</a>
+      </div>
+    </div>
+    
+    <div id="message" class="message"></div>
+  </div>
+
+  <script>
+    const emailInput = document.getElementById('email');
+    const codeInput = document.getElementById('code');
+    const sendCodeBtn = document.getElementById('sendCodeBtn');
+    const verifyCodeBtn = document.getElementById('verifyCodeBtn');
+    const messageDiv = document.getElementById('message');
+    const stepEmail = document.getElementById('stepEmail');
+    const stepCode = document.getElementById('stepCode');
+    const backToEmailLink = document.getElementById('backToEmail');
+    
+    let currentEmail = '';
+    
+    async function showMessage(text, type) {
+      messageDiv.textContent = text;
+      messageDiv.className = 'message ' + type;
+      messageDiv.style.display = 'block';
+    }
+    
+    async function requestCode() {
+      const email = emailInput.value.trim();
+      if (!email || !email.includes('@')) {
+        showMessage('Please enter a valid email address', 'error');
+        return;
+      }
+      
+      sendCodeBtn.disabled = true;
+      sendCodeBtn.textContent = 'Sending...';
+      
+      try {
+        const response = await fetch('/api/auth/request-code', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+          currentEmail = email;
+          stepEmail.classList.remove('active');
+          stepCode.classList.add('active');
+          showMessage('Code sent to ' + email, 'success');
+          codeInput.focus();
+        } else {
+          showMessage(data.error || 'Failed to send code', 'error');
+        }
+      } catch (error) {
+        showMessage('Network error: ' + error.message, 'error');
+      } finally {
+        sendCodeBtn.disabled = false;
+        sendCodeBtn.textContent = 'Send Login Code';
+      }
+    }
+    
+    async function verifyCode() {
+      const code = codeInput.value.trim();
+      if (code.length !== 6 || !/^\\d{6}$/.test(code)) {
+        showMessage('Please enter a valid 6‑digit code', 'error');
+        return;
+      }
+      
+      verifyCodeBtn.disabled = true;
+      verifyCodeBtn.textContent = 'Verifying...';
+      
+      try {
+        const response = await fetch('/api/auth/verify-code', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: currentEmail, code })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+          // Redirect to dashboard with token
+          const url = new URL(window.location.href);
+          url.searchParams.set('authToken', data.token);
+          window.location.href = url.toString();
+        } else {
+          showMessage(data.error || 'Invalid code', 'error');
+        }
+      } catch (error) {
+        showMessage('Network error: ' + error.message, 'error');
+      } finally {
+        verifyCodeBtn.disabled = false;
+        verifyCodeBtn.textContent = 'Verify Code';
+      }
+    }
+    
+    sendCodeBtn.addEventListener('click', requestCode);
+    verifyCodeBtn.addEventListener('click', verifyCode);
+    backToEmailLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      stepCode.classList.remove('active');
+      stepEmail.classList.add('active');
+      showMessage('', '');
+    });
+    
+    // Allow Enter key in inputs
+    emailInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') requestCode();
+    });
+    
+    codeInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') verifyCode();
+    });
+    
+    // Auto-focus email input
+    emailInput.focus();
+  </script>
+</body>
+</html>`;
+        return res.send(loginPage);
+      }
+      
+      // Token is valid, serve dashboard with token embedded
+      const dashboardPath = path.join(__dirname, 'dashboard-enhanced.html');
+      if (fs.existsSync(dashboardPath)) {
+        let html = fs.readFileSync(dashboardPath, 'utf8');
+        // Inject token into JavaScript for API calls
+        html = html.replace('</body>', 
+          `<script>
+            window.authToken = '${token}';
+            localStorage.setItem('authToken', '${token}');
+          </script></body>`);
+        res.send(html);
+      } else {
+        res.send(`<!DOCTYPE html><html><head><title>WooMonitor Dashboard</title></head><body>
+          <h1>WooMonitor Dashboard</h1><p>dashboard-enhanced.html not found. Place it in the project root.</p>
+          <p><a href="/api/dashboard">View API JSON</a></p></body></html>`);
+      }
     } else {
-      res.send(`<!DOCTYPE html><html><head><title>WooMonitor Dashboard</title></head><body>
-        <h1>WooMonitor Dashboard</h1><p>dashboard-enhanced.html not found. Place it in the project root.</p>
-        <p><a href="/api/dashboard">View API JSON</a></p></body></html>`);
+      // Auth not required, serve dashboard normally
+      const dashboardPath = path.join(__dirname, 'dashboard-enhanced.html');
+      if (fs.existsSync(dashboardPath)) {
+        res.send(fs.readFileSync(dashboardPath, 'utf8'));
+      } else {
+        res.send(`<!DOCTYPE html><html><head><title>WooMonitor Dashboard</title></head><body>
+          <h1>WooMonitor Dashboard</h1><p>dashboard-enhanced.html not found. Place it in the project root.</p>
+          <p><a href="/api/dashboard">View API JSON</a></p></body></html>`);
+      }
     }
   } catch (error) {
     console.error('Error serving dashboard:', error);
@@ -603,7 +1185,164 @@ app.get("/download/plugin", (req, res) => {
 });
 
 // ==========================================
-// 7. DEEP HEALTH WOOCOMMERCE MONITOR
+// 7. AUTHENTICATION ENDPOINTS
+// ==========================================
+
+/**
+ * Send authentication code via email
+ */
+async function sendAuthCode(email, code) {
+  if (!process.env.MAILGUN_API_KEY || !process.env.MAILGUN_DOMAIN) {
+    console.log(`[Auth] Mock sending code ${code} to ${email} (Mailgun not configured)`);
+    return true;
+  }
+  
+  try {
+    const mailFrom = process.env.MAIL_FROM || `WooMonitor Auth <auth@${process.env.MAILGUN_DOMAIN}>`;
+    
+    await axios.post(
+      `https://api.mailgun.net/v3/${process.env.MAILGUN_DOMAIN}/messages`,
+      new URLSearchParams({
+        from: mailFrom,
+        to: email,
+        subject: `Your WooMonitor Login Code: ${code}`,
+        text: `Your WooMonitor login code is: ${code}\n\nThis code will expire in 10 minutes.\n\nIf you didn't request this code, you can safely ignore this email.`,
+      }),
+      { auth: { username: "api", password: process.env.MAILGUN_API_KEY } }
+    );
+    
+    console.log(`[Auth] Sent code ${code} to ${email} via Mailgun`);
+    return true;
+  } catch (error) {
+    console.error(`[Auth] Failed to send code to ${email}:`, error.message);
+    return false;
+  }
+}
+
+/**
+ * Generate a secure random token
+ */
+function generateToken(email) {
+  const payload = {
+    email,
+    issued: Date.now(),
+    expires: Date.now() + (30 * 24 * 60 * 60 * 1000), // 30 days
+  };
+  
+  const token = crypto.randomBytes(32).toString('hex');
+  authTokens[token] = payload;
+  
+  // Clean up expired tokens periodically
+  const now = Date.now();
+  for (const [t, data] of Object.entries(authTokens)) {
+    if (data.expires < now) {
+      delete authTokens[t];
+    }
+  }
+  
+  return token;
+}
+
+// Request authentication code
+app.post("/api/auth/request-code", async (req, res) => {
+  const { email } = req.body;
+  
+  if (!email || !email.includes('@')) {
+    return res.status(400).json({ error: 'Valid email required' });
+  }
+  
+  // Check if email is allowed
+  if (!ALLOWED_EMAILS.includes(email.toLowerCase())) {
+    console.log(`[Auth] Rejected login attempt for ${email} - not in allowed list`);
+    return res.status(403).json({ error: 'Email not authorized' });
+  }
+  
+  // Generate 6-digit code
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const expires = Date.now() + (10 * 60 * 1000); // 10 minutes
+  
+  // Store code
+  authCodes[email.toLowerCase()] = { code, expires };
+  
+  // Send code via email
+  const sent = await sendAuthCode(email, code);
+  
+  if (!sent) {
+    return res.status(500).json({ error: 'Failed to send authentication code' });
+  }
+  
+  res.json({ success: true, message: 'Authentication code sent' });
+});
+
+// Verify authentication code and issue token
+app.post("/api/auth/verify-code", async (req, res) => {
+  const { email, code } = req.body;
+  
+  if (!email || !code) {
+    return res.status(400).json({ error: 'Email and code required' });
+  }
+  
+  const emailLower = email.toLowerCase();
+  const authData = authCodes[emailLower];
+  
+  // Check if code exists and is not expired
+  if (!authData || authData.expires < Date.now()) {
+    return res.status(401).json({ error: 'Invalid or expired code' });
+  }
+  
+  // Verify code
+  if (authData.code !== code) {
+    return res.status(401).json({ error: 'Invalid code' });
+  }
+  
+  // Code is valid, generate token
+  const token = generateToken(emailLower);
+  
+  // Clean up used code
+  delete authCodes[emailLower];
+  
+  res.json({ 
+    success: true, 
+    token,
+    email: emailLower,
+    expires: authTokens[token].expires,
+  });
+});
+
+// Get current user info
+app.get("/api/auth/me", (req, res) => {
+  const token = req.headers['x-auth-token'] || req.query.authToken;
+  
+  if (!token || !authTokens[token]) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+  
+  const authData = authTokens[token];
+  if (authData.expires < Date.now()) {
+    delete authTokens[token];
+    return res.status(401).json({ error: 'Token expired' });
+  }
+  
+  res.json({ 
+    email: authData.email,
+    issued: authData.issued,
+    expires: authData.expires,
+  });
+});
+
+// Logout (invalidate token)
+app.post("/api/auth/logout", (req, res) => {
+  const token = req.headers['x-auth-token'] || req.query.authToken;
+  
+  if (token && authTokens[token]) {
+    delete authTokens[token];
+  }
+  
+  res.json({ success: true });
+});
+
+// ==========================================
+// 8. DEEP HEALTH WOOCOMMERCE MONITOR
 // ==========================================
 async function checkWooCommerceAPI() {
   if (sites.length === 0) {
@@ -731,7 +1470,7 @@ cron.schedule("0 * * * *", () => {
 // ==========================================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 WooCommerce Monitor Server v2.3.0`);
+  console.log(`🚀 WooCommerce Monitor Server v2.5.0`);
   console.log(`📡 Listening on port ${PORT}`);
   console.log(`🌐 Health endpoint: http://localhost:${PORT}/api/health`);
   console.log(`📊 Dashboard: http://localhost:${PORT}/dashboard`);

@@ -84,6 +84,19 @@ header p{opacity:.85;font-size:14px}
 .badge-api{background:#d4edda;color:#155724}
 .badge-plugin{background:#cce5ff;color:#004085}
 
+/* Chat Styles */
+.chat-message { margin-bottom: 16px; padding: 12px 16px; border-radius: 12px; border: 1px solid #e8e8e8; max-width: 80%; word-wrap: break-word; }
+.chat-message.ai { background: #fff; align-self: flex-start; }
+.chat-message.user { background: #3498db; color: #fff; align-self: flex-end; margin-left: auto; }
+.chat-message .sender { font-weight: 600; margin-bottom: 4px; font-size: 13px; }
+.chat-message.ai .sender { color: #3498db; }
+.chat-message.user .sender { color: rgba(255,255,255,0.9); }
+.chat-message .content { font-size: 14px; line-height: 1.5; }
+.chat-message .timestamp { font-size: 11px; color: #999; margin-top: 6px; text-align: right; }
+.chat-message.user .timestamp { color: rgba(255,255,255,0.7); }
+.chat-message.loading { background: #f8f9fa; border: 1px dashed #ddd; text-align: center; color: #666; font-style: italic; }
+#chatMessages { display: flex; flex-direction: column; }
+
 @media(max-width:768px){
   header{flex-direction:column;text-align:center}
   .stats{grid-template-columns:repeat(2,1fr)}
@@ -97,7 +110,7 @@ header p{opacity:.85;font-size:14px}
 <div class="container">
   <header>
     <div>
-      <h1>🚀 WooCommerce Comprehensive Monitor v2.3.0</h1>
+      <h1>🚀 WooCommerce Comprehensive Monitor v2.5.0</h1>
       <p>Multi-store monitoring & dispute protection with auto-updates</p>
     </div>
     <div class="header-actions">
@@ -113,6 +126,7 @@ header p{opacity:.85;font-size:14px}
     <button class="tab" data-tab="stores" onclick="switchTab('stores')">🏪 Stores</button>
     <button class="tab" data-tab="add-store" onclick="switchTab('add-store')">➕ Add Store</button>
     <button class="tab" data-tab="plugin" onclick="switchTab('plugin')">📥 Plugin</button>
+    <button class="tab" data-tab="chat" onclick="switchTab('chat')">💬 DeepSeek Chat</button>
   </div>
 
   <!-- ALERTS PANEL -->
@@ -174,12 +188,12 @@ header p{opacity:.85;font-size:14px}
   <!-- PLUGIN PANEL -->
   <div id="panel-plugin" class="panel">
     <div class="plugin-download">
-      <h3>📥 WooCommerce Comprehensive Monitor Plugin v4.4.6</h3>
+      <h3>📥 WooCommerce Comprehensive Monitor Plugin v4.4.9</h3>
       <p>Install this plugin on your WooCommerce stores. It auto-connects to this monitoring server on activation — zero configuration needed.</p>
       <a href="https://github.com/camster91/woo-comprehensive-monitor/releases/latest" target="_blank" class="download-link">
-        ⬇️ Download Plugin v4.4.6
+        ⬇️ Download Plugin v4.4.9
       </a>
-      <p style="margin-top: 16px; font-size: 14px; opacity: 0.9;">Latest version: 4.4.6 | Compatible with WordPress 5.6+, WooCommerce 5.0+</p>
+      <p style="margin-top: 16px; font-size: 14px; opacity: 0.9;">Latest version: 4.4.9 | Compatible with WordPress 5.6+, WooCommerce 5.0+</p>
     </div>
 
     <div style="background:#fff;border:1px solid #e8e8e8;border-radius:10px;padding:24px">
@@ -200,7 +214,7 @@ header p{opacity:.85;font-size:14px}
         <li>All stores appear in this dashboard instantly</li>
       </ol>
 
-      <h3 style="margin-top:24px;margin-bottom:12px">Plugin Features (v4.4.6)</h3>
+      <h3 style="margin-top:24px;margin-bottom:12px">Plugin Features (v4.4.9)</h3>
       <ul style="line-height:2;color:#555;padding-left:20px">
         <li>✅ Safe auto-updater with backup & rollback</li>
         <li>✅ Frontend error tracking (JS, AJAX, checkout)</li>
@@ -219,11 +233,109 @@ header p{opacity:.85;font-size:14px}
       </ul>
     </div>
   </div>
+
+  <!-- DeepSeek Chat Panel -->
+  <div id="panel-chat" class="panel">
+    <div style="margin-bottom: 20px;">
+      <h3>💬 DeepSeek AI Assistant</h3>
+      <p style="color: #666; font-size: 14px; margin-bottom: 16px;">Ask questions about WordPress, WooCommerce, or plugin issues. The AI can analyze errors and suggest fixes.</p>
+      
+      <div style="display: flex; gap: 12px; margin-bottom: 20px;">
+        <select id="chatStoreSelect" style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+          <option value="">Select a store to analyze...</option>
+        </select>
+        <button id="loadStoreDataBtn" class="btn btn-primary" onclick="loadStoreData()" style="white-space: nowrap;">Load Store Data</button>
+      </div>
+      
+      <div id="chatStatus" style="font-size: 13px; color: #666; margin-bottom: 16px;"></div>
+    </div>
+    
+    <div id="chatContainer" style="display: flex; flex-direction: column; height: 500px; border: 1px solid #e8e8e8; border-radius: 12px; overflow: hidden;">
+      <div id="chatMessages" style="flex: 1; overflow-y: auto; padding: 20px; background: #fafafa;">
+        <div class="chat-message ai" style="margin-bottom: 16px; padding: 12px 16px; background: #fff; border-radius: 12px; border: 1px solid #e8e8e8; max-width: 80%;">
+          <div style="font-weight: 600; color: #3498db; margin-bottom: 4px;">🤖 DeepSeek Assistant</div>
+          <div>Hello! I'm your WooCommerce AI assistant. I can help you:</div>
+          <ul style="margin: 8px 0 8px 20px; color: #555;">
+            <li>Analyze WordPress/WooCommerce errors from your stores</li>
+            <li>Debug plugin compatibility issues</li>
+            <li>Suggest fixes for common problems</li>
+            <li>Explain monitoring dashboard alerts</li>
+            <li>Provide best practices for WooCommerce stores</li>
+          </ul>
+          <div>Select a store above to load its recent errors and health data, then ask me anything!</div>
+        </div>
+      </div>
+      
+      <div style="border-top: 1px solid #e8e8e8; padding: 16px; background: #fff;">
+        <div style="display: flex; gap: 8px;">
+          <textarea id="chatInput" placeholder="Type your question here... (e.g., 'Why is Stripe showing as not active?', 'How do I fix the Action Scheduler errors?')" style="flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; resize: vertical; min-height: 60px; font-family: inherit;"></textarea>
+          <button id="sendChatBtn" class="btn btn-success" onclick="sendChatMessage()" style="align-self: flex-end; padding: 12px 20px;">Send</button>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-top: 8px;">
+          <div style="font-size: 12px; color: #999;">
+            <label><input type="checkbox" id="includeStoreData" checked> Include store data in analysis</label>
+          </div>
+          <div style="font-size: 12px; color: #999;">
+            <button class="btn btn-sm btn-outline" onclick="clearChat()" style="color: #666; border-color: #ddd; padding: 4px 8px;">Clear Chat</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div style="margin-top: 20px; padding: 16px; background: #f8f9fa; border-radius: 10px; font-size: 13px; color: #666;">
+      <div style="font-weight: 600; margin-bottom: 8px;">⚠️ Important Notes:</div>
+      <ul style="margin-left: 20px;">
+        <li>This AI uses DeepSeek API (OpenAI-compatible) to analyze your store data</li>
+        <li>No store data is sent to third parties without your permission</li>
+        <li>Suggested fixes are recommendations - always test in staging first</li>
+        <li>The AI cannot directly modify your stores - it only provides analysis</li>
+        <li>For critical issues, consult with a WordPress developer</li>
+      </ul>
+    </div>
+  </div>
 </div>
 
 <script>
 const BASE = window.location.origin;
 document.getElementById('serverUrl').textContent = BASE;
+
+// Authentication helper
+function getAuthToken() {
+  return window.authToken || localStorage.getItem('authToken') || new URLSearchParams(window.location.search).get('authToken');
+}
+
+async function apiFetch(url, options = {}) {
+  const token = getAuthToken();
+  const headers = {
+    ...(options.headers || {}),
+  };
+  if (token) {
+    headers['x-auth-token'] = token;
+  }
+  
+  const response = await fetch(url, { ...options, headers });
+  
+  // Handle authentication errors
+  if (response.status === 401) {
+    // Clear invalid token
+    localStorage.removeItem('authToken');
+    delete window.authToken;
+    
+    // Redirect to login if we're not already on the login page
+    if (!window.location.pathname.includes('login')) {
+      window.location.href = '/dashboard';
+    }
+    throw new Error('Authentication required');
+  }
+  
+  return response;
+}
+
+// Helper for JSON responses
+async function apiFetchJson(url, options = {}) {
+  const response = await apiFetch(url, options);
+  return response.json();
+}
 
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -235,8 +347,7 @@ function switchTab(name) {
 
 async function loadDashboard() {
   try {
-    const res = await fetch('/api/dashboard');
-    const data = await res.json();
+    const data = await apiFetchJson('/api/dashboard');
 
     const o = data.overview;
     document.getElementById('stats').innerHTML = `
@@ -297,7 +408,7 @@ async function addStore(e) {
 
   try {
     // Send as plugin_activated to add to sites.json
-    const res = await fetch('/api/track-woo-error', {
+    const res = await apiFetch('/api/track-woo-error', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
@@ -320,7 +431,7 @@ async function addStore(e) {
       // If API keys provided, also update via direct file manipulation
       if (key && secret) {
         // Reload sites to pick up new store, then we'll add credentials
-        await fetch('/api/reload-sites', {method: 'POST'});
+        await apiFetch('/api/reload-sites', {method: 'POST'});
       }
       result.textContent = '✅ Store added!';
       result.style.color = '#27ae60';
@@ -339,7 +450,7 @@ async function addStore(e) {
 async function removeStore(storeId) {
   if (!confirm('Remove this store from monitoring? This will delete it from sites.json.')) return;
   try {
-    const res = await fetch('/api/stores/remove', {
+    const res = await apiFetch('/api/stores/remove', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({storeId})
@@ -347,7 +458,7 @@ async function removeStore(storeId) {
     const data = await res.json();
     if (data.success) {
       // Also clear alerts for that store
-      await fetch('/api/dashboard/clear-alerts', {
+      await apiFetch('/api/dashboard/clear-alerts', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify({storeId})
@@ -361,19 +472,18 @@ async function removeStore(storeId) {
 
 async function clearAlerts() {
   if (!confirm('Clear ALL alerts?')) return;
-  await fetch('/api/dashboard/clear-alerts', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+  await apiFetch('/api/dashboard/clear-alerts', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
   loadDashboard();
 }
 
 async function deleteAlert(index) {
-  await fetch('/api/dashboard/alerts/'+index, {method:'DELETE'});
+  await apiFetch('/api/dashboard/alerts/'+index, {method:'DELETE'});
   loadDashboard();
 }
 
 async function loadSitesConfig() {
   try {
-    const res = await fetch('/api/dashboard');
-    const data = await res.json();
+    const data = await apiFetchJson('/api/dashboard');
     const el = document.getElementById('sites-config');
     if (data.stores.length === 0) {
       el.textContent = '[ ] — No stores configured yet';
@@ -391,6 +501,209 @@ function esc(s) {
   d.textContent = s;
   return d.innerHTML;
 }
+
+// Chat functionality
+let chatStoreData = null;
+let chatHistory = [];
+
+async function loadStoreData() {
+  const storeSelect = document.getElementById('chatStoreSelect');
+  const storeId = storeSelect.value;
+  const statusEl = document.getElementById('chatStatus');
+  
+  if (!storeId) {
+    statusEl.textContent = 'Please select a store first.';
+    statusEl.style.color = '#e74c3c';
+    return;
+  }
+  
+  statusEl.textContent = 'Loading store data...';
+  statusEl.style.color = '#666';
+  
+  try {
+    const data = await apiFetchJson('/api/dashboard');
+    const store = data.stores.find(s => s.id === storeId);
+    
+    if (!store) {
+      statusEl.textContent = 'Store not found.';
+      statusEl.style.color = '#e74c3c';
+      return;
+    }
+    
+    // Get recent alerts for this store
+    const storeAlerts = data.recentAlerts.filter(a => a.siteId === storeId);
+    
+    chatStoreData = {
+      store: store,
+      alerts: storeAlerts.slice(0, 10), // Last 10 alerts
+      healthChecks: [], // Could be extended with health check data
+      pluginVersion: store.plugin_version,
+      woocommerceVersion: store.woocommerce_version,
+      adminNotices: store.admin_notices || []
+    };
+    
+    // Update store select dropdown if needed
+    if (storeSelect.options.length === 1) {
+      data.stores.forEach(s => {
+        if (!Array.from(storeSelect.options).some(o => o.value === s.id)) {
+          const option = document.createElement('option');
+          option.value = s.id;
+          option.textContent = `${s.name} (${s.url}) - Plugin v${s.plugin_version}`;
+          storeSelect.appendChild(option);
+        }
+      });
+    }
+    
+    statusEl.textContent = `Loaded data for ${store.name}. ${storeAlerts.length} recent alerts, ${chatStoreData.adminNotices.length} admin notices.`;
+    statusEl.style.color = '#27ae60';
+    
+    // Add a message to chat
+    addChatMessage('ai', `I've loaded data for **${store.name}** (${store.url}).\n\n- Plugin version: ${store.plugin_version}\n- WooCommerce: ${store.woocommerce_version}\n- Recent alerts: ${storeAlerts.length}\n- Admin notices: ${chatStoreData.adminNotices.length}\n\nWhat would you like me to analyze?`);
+    
+  } catch (error) {
+    console.error('Error loading store data:', error);
+    statusEl.textContent = 'Error loading store data: ' + error.message;
+    statusEl.style.color = '#e74c3c';
+  }
+}
+
+function addChatMessage(sender, content, timestamp = new Date()) {
+  const messagesEl = document.getElementById('chatMessages');
+  const messageDiv = document.createElement('div');
+  messageDiv.className = `chat-message ${sender}`;
+  
+  const timeStr = timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  
+  messageDiv.innerHTML = `
+    <div class="sender">${sender === 'ai' ? '🤖 DeepSeek Assistant' : '👤 You'}</div>
+    <div class="content">${content.replace(/\n/g, '<br>')}</div>
+    <div class="timestamp">${timeStr}</div>
+  `;
+  
+  messagesEl.appendChild(messageDiv);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  
+  // Add to history
+  chatHistory.push({ sender, content, timestamp });
+}
+
+async function sendChatMessage() {
+  const inputEl = document.getElementById('chatInput');
+  const message = inputEl.value.trim();
+  
+  if (!message) return;
+  
+  // Add user message
+  addChatMessage('user', message);
+  inputEl.value = '';
+  
+  // Show loading indicator
+  const messagesEl = document.getElementById('chatMessages');
+  const loadingDiv = document.createElement('div');
+  loadingDiv.className = 'chat-message ai loading';
+  loadingDiv.textContent = 'Thinking...';
+  messagesEl.appendChild(loadingDiv);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  
+  try {
+    // Prepare context for AI
+    const context = {
+      question: message,
+      storeData: document.getElementById('includeStoreData').checked ? chatStoreData : null,
+      chatHistory: chatHistory.slice(-5) // Last 5 messages for context
+    };
+    
+    // Call DeepSeek API via our server
+    const response = await apiFetch('/api/chat/deepseek', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(context)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    // Remove loading indicator
+    messagesEl.removeChild(loadingDiv);
+    
+    // Add AI response
+    if (data.error) {
+      addChatMessage('ai', `Sorry, I encountered an error: ${data.error}\n\nYou can try asking a simpler question or check if the DeepSeek API is configured.`);
+    } else {
+      addChatMessage('ai', data.response);
+    }
+    
+  } catch (error) {
+    console.error('Chat error:', error);
+    
+    // Remove loading indicator
+    if (messagesEl.contains(loadingDiv)) {
+      messagesEl.removeChild(loadingDiv);
+    }
+    
+    // Fallback response if API fails
+    addChatMessage('ai', `I'm having trouble connecting to the AI service. Error: ${error.message}\n\nHere are some general suggestions:\n\n1. Check if the store has WooCommerce Subscriptions plugin installed\n2. Verify Stripe payment gateway is enabled in WooCommerce → Settings → Payments\n3. Check WordPress error logs for fatal errors\n4. Ensure WP-Cron is working properly (Action Scheduler)\n5. Verify PHP version is 7.4 or higher`);
+  }
+}
+
+function clearChat() {
+  if (!confirm('Clear all chat messages?')) return;
+  
+  const messagesEl = document.getElementById('chatMessages');
+  // Keep only the initial welcome message
+  const welcomeMsg = messagesEl.querySelector('.chat-message.ai');
+  messagesEl.innerHTML = '';
+  if (welcomeMsg) {
+    messagesEl.appendChild(welcomeMsg);
+  }
+  
+  chatHistory = [];
+  chatStoreData = null;
+  
+  // Reset status
+  document.getElementById('chatStatus').textContent = '';
+  document.getElementById('chatStoreSelect').value = '';
+}
+
+// Load stores into dropdown when chat tab is shown
+document.addEventListener('DOMContentLoaded', function() {
+  // Add event listener for chat tab
+  const chatTab = document.querySelector('[data-tab="chat"]');
+  if (chatTab) {
+    chatTab.addEventListener('click', function() {
+      // Load stores into dropdown
+      setTimeout(() => {
+        const storeSelect = document.getElementById('chatStoreSelect');
+        if (storeSelect && storeSelect.options.length === 1) {
+          apiFetchJson('/api/dashboard')
+            .then(data => {
+              data.stores.forEach(store => {
+                const option = document.createElement('option');
+                option.value = store.id;
+                option.textContent = `${store.name} (${store.url}) - Plugin v${store.plugin_version}`;
+                storeSelect.appendChild(option);
+              });
+            })
+            .catch(console.error);
+        }
+      }, 100);
+    });
+  }
+  
+  // Allow pressing Enter to send (Shift+Enter for new line)
+  const chatInput = document.getElementById('chatInput');
+  if (chatInput) {
+    chatInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendChatMessage();
+      }
+    });
+  }
+});
 
 // Load on start + auto-refresh
 loadDashboard();

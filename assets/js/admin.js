@@ -116,4 +116,53 @@ jQuery(document).ready(function($) {
             error: function() { $modal.hide(); $btn.prop('disabled', false).text('Save'); }
         });
     });
+
+    // Fix Issues (Action Scheduler, WP-Cron, etc.)
+    $(document).on('click', '.wcm-fix-issue', function() {
+        var $btn = $(this), $fixItem = $btn.closest('.wcm-fix-item');
+        var action = $btn.data('action');
+        $btn.prop('disabled', true).text('Fixing...');
+
+        $.ajax({
+            url: wcm_ajax.ajax_url,
+            type: 'POST',
+            data: { 
+                action: 'wcm_fix_' + action, 
+                nonce: wcm_ajax.nonce 
+            },
+            success: function(response) {
+                if (response.success) {
+                    $fixItem.css('border-left-color', '#4CAF50');
+                    $fixItem.find('strong').css('color', '#4CAF50');
+                    $btn.remove();
+                    $fixItem.append('<div style="color:#4CAF50;font-weight:bold;margin-top:5px;">✅ ' + (response.data.message || 'Fixed') + '</div>');
+                    
+                    // Show results if available
+                    if (response.data.results) {
+                        var results = response.data.results;
+                        var resultText = '';
+                        if (results.cleaned_failed !== undefined) {
+                            resultText += 'Cleaned ' + results.cleaned_failed + ' failed tasks. ';
+                        }
+                        if (results.cleaned_old !== undefined) {
+                            resultText += 'Cleaned ' + results.cleaned_old + ' old tasks. ';
+                        }
+                        if (results.total_before !== undefined && results.total_after !== undefined) {
+                            resultText += 'Total tasks: ' + results.total_before + ' → ' + results.total_after;
+                        }
+                        if (resultText) {
+                            $fixItem.append('<p style="font-size:12px;color:#666;margin-top:3px;">' + resultText + '</p>');
+                        }
+                    }
+                } else {
+                    $btn.prop('disabled', false).text('Try Again');
+                    $fixItem.append('<div style="color:#F44336;margin-top:5px;">Failed: ' + (response.data.message || 'Unknown error') + '</div>');
+                }
+            },
+            error: function() {
+                $btn.prop('disabled', false).text('Try Again');
+                $fixItem.append('<div style="color:#F44336;margin-top:5px;">AJAX error. Please try again.</div>');
+            }
+        });
+    });
 });
