@@ -3,7 +3,7 @@
 # Files are zipped directly without parent folder
 
 PLUGIN_NAME="woo-comprehensive-monitor"
-VERSION="4.5.1"
+VERSION="4.5.2"
 ZIP_FILE="${PLUGIN_NAME}-v${VERSION}.zip"
 
 echo "Creating release v${VERSION}..."

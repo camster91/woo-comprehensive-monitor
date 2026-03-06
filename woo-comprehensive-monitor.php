@@ -3,7 +3,7 @@
  * Plugin Name: WooCommerce Comprehensive Monitor & Dispute Protection
  * Plugin URI: https://ashbi.ca
  * Description: Complete WooCommerce monitoring, error tracking, dispute protection, and health alerts. Combines frontend monitoring, dispute evidence generation, and centralized health reporting.
- * Version: 4.5.1
+ * Version: 4.5.2
  * Author: Ashbi
  * Author URI: https://ashbi.ca
  * License: GPL2

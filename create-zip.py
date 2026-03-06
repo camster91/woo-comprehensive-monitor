@@ -13,7 +13,7 @@ from pathlib import Path
 
 # Plugin information
 PLUGIN_NAME = "woo-comprehensive-monitor"
-VERSION = "4.4.3"
+VERSION = "4.5.2"
 ZIP_FILE = f"{PLUGIN_NAME}-v{VERSION}.zip"
 
 # Files/directories to include
@@ -125,12 +125,12 @@ def main():
     size = os.path.getsize(ZIP_FILE)
     size_mb = size / 1024 / 1024
     
-    print(f"\n✅ Successfully created {ZIP_FILE}")
-    print(f"📦 Size: {size_mb:.2f} MB")
-    print(f"📁 Files: {len(files_to_zip)}")
+    print(f"\n[OK] Successfully created {ZIP_FILE}")
+    print(f"Size: {size_mb:.2f} MB")
+    print(f"Files: {len(files_to_zip)}")
     
     # List first 20 files in ZIP
-    print("\n📁 ZIP Contents (first 20 files):")
+    print("\nZIP Contents (first 20 files):")
     try:
         with zipfile.ZipFile(ZIP_FILE, "r") as zf:
             for i, name in enumerate(zf.namelist()[:20]):
@@ -138,7 +138,7 @@ def main():
     except:
         print("  (Cannot list contents)")
     
-    print("\n📋 Release Notes for v{VERSION}:")
+    print("\nRelease Notes for v{VERSION}:")
     print("   • Added safe auto-updater with backup & rollback")
     print("   • Added compatibility checks before updates")
     print("   • Added settings for update behavior")
