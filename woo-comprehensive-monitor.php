@@ -44,6 +44,7 @@ require_once WCM_PLUGIN_DIR . 'includes/class-wcm-evidence-generator.php';
 require_once WCM_PLUGIN_DIR . 'includes/class-wcm-subscription-protector.php';
 require_once WCM_PLUGIN_DIR . 'includes/class-wcm-preorder.php';
 require_once WCM_PLUGIN_DIR . 'includes/class-wcm-auto-updater.php';
+require_once WCM_PLUGIN_DIR . 'includes/class-wcm-file-analyzer.php';
 
 /**
  * Main plugin class
@@ -60,6 +61,7 @@ class WooComprehensiveMonitor {
     private $subscription_protector;
     private $preorder;
     private $auto_updater;
+    private $file_analyzer;
 
     /**
      * Get singleton instance
@@ -164,6 +166,9 @@ class WooComprehensiveMonitor {
             
             // Initialize auto-updater (moved from constructor to avoid early errors)
             $this->auto_updater = new WCM_Auto_Updater();
+            
+            // Initialize file analyzer for AI file access
+            $this->file_analyzer = WCM_File_Analyzer::get_instance();
             
         } catch (Exception $e) {
             // Log error but don't crash
@@ -740,6 +745,13 @@ class WooComprehensiveMonitor {
      */
     public function get_auto_updater() {
         return $this->auto_updater;
+    }
+
+    /**
+     * Get file analyzer instance
+     */
+    public function get_file_analyzer() {
+        return $this->file_analyzer;
     }
 
     /**

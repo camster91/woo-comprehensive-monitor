@@ -3,3 +3,9 @@ node_modules/
 *.log
 server/sites.json
 !server/sites.json
+dist/
+*.zip
+*.backup
+test-syntax.php
+check-braces.php
+exclude.txt

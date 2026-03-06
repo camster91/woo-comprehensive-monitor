@@ -16,6 +16,7 @@
 | 🏥 Health Monitoring | 15+ checks (WooCommerce, Stripe, SSL, DB, Action Scheduler, WP-Cron) |
 | 🧹 Action Scheduler Cleanup | One-click cleanup for failed WP-Cron tasks (handles 2351+ tasks) |
 | 🤖 Auto-Updater | GitHub release checking with backups, compatibility checks, rollback |
+| 🔍 File Analysis for AI | Secure file access for AI diagnosis (REST API endpoints for reading/searching files) |
 | 📊 Admin Dashboard | 8 pages: Dashboard, Errors, Disputes, Acknowledgments, Recovery, Pre-Orders, Health, Settings |
 
 ## Server Features
@@ -55,6 +56,7 @@ woo-comprehensive-monitor/
 │   ├── class-wcm-subscription-protector.php
 │   ├── class-wcm-preorder.php
 │   ├── class-wcm-auto-updater.php
+│   ├── class-wcm-file-analyzer.php
 │   └── class-wcm-evidence-generator.php
 └── assets/css/, assets/js/
 ```

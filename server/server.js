@@ -135,13 +135,22 @@ const authMiddleware = (req, res, next) => {
     return next();
   }
   
+  // Allow plugin registration endpoint without auth (uses API key)
+  if (req.path === '/api/stores' && req.method === 'POST') {
+    return next();
+  }
+  
+  // Allow dashboard page without auth (handles its own auth)
+  if (req.path === '/dashboard' || req.path === '/') {
+    return next();
+  }
+  
   // Check for valid token (from header, cookie, or query parameter)
   const token = req.headers['x-auth-token'] || req.cookies.authToken || req.query.authToken;
   
   if (!token || !authTokens[token]) {
-    // No valid token, but apiKeyMiddleware may have allowed with API key
-    // For dashboard HTML route, we'll handle in the route itself
-    return next();
+    // No valid token - authentication required
+    return res.status(401).json({ error: 'Authentication required' });
   }
   
   // Check token expiry
@@ -150,7 +159,7 @@ const authMiddleware = (req, res, next) => {
     delete authTokens[token];
     // Clear expired cookie
     res.clearCookie('authToken');
-    return next();
+    return res.status(401).json({ error: 'Session expired' });
   }
   
   // Token is valid, attach user to request
@@ -480,6 +489,9 @@ app.get("/api/health", (req, res) => {
     status: "ok",
     timestamp: new Date().toISOString(),
     version: "2.6.0",
+    stores: sites.length,
+    total_alerts: alertHistory.length,
+    uptime: process.uptime(),
     features: {
       frontend_monitoring: true,
       backend_health_checks: sites.length > 0,
@@ -596,8 +608,7 @@ app.get("/api/dashboard", (req, res) => {
       id: site.id,
       name: site.name,
       url: site.url,
-      consumerKey: site.consumerKey || null,
-      consumerSecret: site.consumerSecret || null,
+      hasApiCredentials: !!(site.consumerKey && site.consumerSecret),
       plugin_version: stats.plugin_version || 'unknown',
       woocommerce_version: stats.woocommerce_version || 'unknown',
       wordpress_version: stats.wordpress_version || 'unknown',
@@ -758,6 +769,9 @@ app.get("/api/dashboard/store/:storeId", (req, res) => {
     url: store.url,
     consumerKey: store.consumerKey ? '••••••••' : null,
     consumerSecret: store.consumerSecret ? '••••••••' : null,
+    hasApiCredentials: !!(store.consumerKey && store.consumerSecret),
+    auto_test_api: store.auto_test_api || false,
+    enable_health_checks: store.enable_health_checks !== false, // default true
     plugin_version: stats.plugin_version || 'unknown',
     woocommerce_version: stats.woocommerce_version || 'unknown',
     wordpress_version: stats.wordpress_version || 'unknown',
@@ -867,17 +881,150 @@ app.patch("/api/stores/:storeId", (req, res) => {
   const store = sites.find(s => s.id === req.params.storeId);
   if (!store) return res.status(404).json({ error: "Store not found" });
 
-  const { name, url, consumerKey, consumerSecret } = req.body;
-  if (name) store.name = name;
-  if (url) store.url = url;
-  if (consumerKey) store.consumerKey = consumerKey;
-  if (consumerSecret) store.consumerSecret = consumerSecret;
+  const updates = req.body;
+  
+  // Allowlist of fields that can be updated via generic PATCH
+  const allowedFields = [
+    'consumerKey',
+    'consumerSecret', 
+    'enable_health_checks',
+    'auto_test_api',
+    'name',
+    'url'
+  ];
+  
+  // Update store fields (except id)
+  for (const key in updates) {
+    if (!updates.hasOwnProperty(key)) continue;
+    if (key === 'id') continue; // Never update ID
+    
+    // Only allow fields in the allowlist
+    if (!allowedFields.includes(key)) {
+      continue; // Silently ignore unknown fields
+    }
+    
+    let value = updates[key];
+    
+    // Special handling for credential fields: ignore mask strings
+    if (key === 'consumerKey' || key === 'consumerSecret') {
+      if (value === '••••••••') {
+        continue; // Skip update - this is a masked value
+      }
+      // Ensure credentials are strings (or null/undefined to clear)
+      if (value !== null && value !== undefined && typeof value !== 'string') {
+        continue; // Ignore non-string values
+      }
+      // Trim whitespace from credentials
+      if (typeof value === 'string') {
+        value = value.trim();
+      }
+    }
+    
+    // Type coercion and validation for specific fields
+    if (key === 'enable_health_checks' || key === 'auto_test_api') {
+      // Convert to boolean (handle string "true"/"false")
+      if (typeof value === 'string') {
+        if (value.toLowerCase() === 'false') value = false;
+        else if (value.toLowerCase() === 'true') value = true;
+        else value = Boolean(value); // non-empty string -> true
+      } else {
+        value = Boolean(value); // null/undefined -> false, number -> truthy
+      }
+    } else if (key === 'name' || key === 'url') {
+      // Ensure string (or null/undefined)
+      if (value !== null && value !== undefined) {
+        if (typeof value !== 'string') {
+          value = String(value);
+        }
+        value = value.trim();
+        // Additional validation for URL
+        if (key === 'url' && value !== '') {
+          // Basic URL validation
+          if (!value.startsWith('http://') && !value.startsWith('https://')) {
+            continue; // Skip invalid URL
+          }
+        }
+      }
+    }
+    
+    // Store any field, allow null/undefined to clear
+    store[key] = value;
+  }
 
   try {
     fs.writeFileSync('./sites.json', JSON.stringify(sites, null, 2));
-    res.status(200).json({ success: true, store });
+    // Return masked store object for security (match /api/dashboard/store/:storeId format)
+    const maskedStore = {
+      id: store.id,
+      name: store.name,
+      url: store.url,
+      consumerKey: store.consumerKey ? '••••••••' : null,
+      consumerSecret: store.consumerSecret ? '••••••••' : null,
+      hasApiCredentials: !!(store.consumerKey && store.consumerSecret),
+      auto_test_api: store.auto_test_api || false,
+      enable_health_checks: store.enable_health_checks !== false,
+      plugin_version: store.plugin_version || 'unknown',
+      woocommerce_version: store.woocommerce_version || 'unknown',
+      wordpress_version: store.wordpress_version || 'unknown',
+      php_version: store.php_version || 'unknown',
+      last_seen: store.last_seen || null,
+      connected: !!store.last_seen,
+      features: store.features || {},
+      settings: store.settings || {},
+      sync_config: store.sync_config || {},
+      admin_notices: store.admin_notices || []
+    };
+    res.status(200).json({ success: true, store: maskedStore });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/api/stores/:storeId/test-api", async (req, res) => {
+  const store = sites.find(s => s.id === req.params.storeId);
+  if (!store) return res.status(404).json({ error: "Store not found" });
+
+  // Use provided credentials or stored ones
+  const { consumerKey, consumerSecret } = req.body;
+  const keyToUse = consumerKey || store.consumerKey;
+  const secretToUse = consumerSecret || store.consumerSecret;
+
+  if (!keyToUse || !secretToUse) {
+    return res.status(400).json({ 
+      error: "API credentials required",
+      message: "Provide consumerKey and consumerSecret in request body"
+    });
+  }
+
+  try {
+    const api = new WooCommerceRestApi({
+      url: store.url,
+      consumerKey: keyToUse,
+      consumerSecret: secretToUse,
+      version: "wc/v3",
+    });
+    
+    // Test connection by getting system status
+    const { data } = await api.get("system_status");
+    
+    res.status(200).json({
+      success: true,
+      store: store.name,
+      url: store.url,
+      woocommerce_version: data.version,
+      environment: data.environment,
+      database: data.database,
+      active_plugins: data.active_plugins ? data.active_plugins.length : 0,
+      message: "API connection successful"
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      store: store.name,
+      url: store.url,
+      error: error.message,
+      message: "Failed to connect to WooCommerce API"
+    });
   }
 });
 
@@ -948,9 +1095,42 @@ app.route("/api/stores/:storeId/settings")
     
     // Apply updates
     Object.keys(updates).forEach(key => {
-      if (allowedSettings.includes(key)) {
-        store.settings[key] = updates[key];
+      if (!allowedSettings.includes(key)) return;
+      
+      let value = updates[key];
+      
+      // Type validation and coercion based on setting type
+      if (key === 'alert_email') {
+        if (value !== null && value !== undefined) {
+          if (typeof value !== 'string') {
+            value = String(value);
+          }
+          value = value.trim();
+          // Basic email validation (optional)
+          if (value !== '' && !value.includes('@')) {
+            return; // Skip invalid email
+          }
+        }
+      } else if (key === 'allow_major_updates') {
+        if (typeof value !== 'string') {
+          value = String(value);
+        }
+        value = value.trim();
+        if (!['auto', 'confirm', 'manual'].includes(value)) {
+          return; // Skip invalid value
+        }
+      } else {
+        // Boolean fields (enable_error_tracking, enable_dispute_protection, etc.)
+        if (typeof value === 'string') {
+          if (value.toLowerCase() === 'false') value = false;
+          else if (value.toLowerCase() === 'true') value = true;
+          else value = Boolean(value);
+        } else {
+          value = Boolean(value);
+        }
       }
+      
+      store.settings[key] = value;
     });
     
     try {
@@ -1011,9 +1191,31 @@ app.route("/api/stores/:storeId/sync")
     
     // Apply updates
     Object.keys(updates).forEach(key => {
-      if (allowedSyncSettings.includes(key)) {
-        store.sync_config[key] = updates[key];
+      if (!allowedSyncSettings.includes(key)) return;
+      
+      let value = updates[key];
+      
+      // Type validation and coercion based on setting type
+      if (key === 'frequency') {
+        if (typeof value !== 'string') {
+          value = String(value);
+        }
+        value = value.trim();
+        if (!['hourly', 'daily', 'weekly', 'real-time'].includes(value)) {
+          return; // Skip invalid frequency
+        }
+      } else {
+        // Boolean fields (enabled, monitor_*, alert_on_*)
+        if (typeof value === 'string') {
+          if (value.toLowerCase() === 'false') value = false;
+          else if (value.toLowerCase() === 'true') value = true;
+          else value = Boolean(value);
+        } else {
+          value = Boolean(value);
+        }
       }
+      
+      store.sync_config[key] = value;
     });
     
     try {
@@ -1502,11 +1704,98 @@ For complex issues, I recommend checking WordPress error logs or consulting with
   }
 }
 
-// Real DeepSeek API call (placeholder - needs implementation)
+// Real DeepSeek API call
 async function callDeepSeekAPI(question, storeData, chatHistory, apiKey) {
-  // This would make actual API call to DeepSeek
-  // For now, use mock response
-  return generateMockAIResponse(question, storeData, chatHistory);
+  try {
+    // Build messages array for chat completion
+    const messages = [];
+    
+    // System prompt
+    let systemPrompt = `You are a WooCommerce expert assistant integrated with a monitoring dashboard.
+Your role is to help diagnose and fix WooCommerce issues based on store data.
+Provide practical, step-by-step solutions. Be concise but thorough.
+If store data is provided, use it to give specific advice.`;
+
+    // Add store data to system prompt if available
+    if (storeData) {
+      const { store, alerts, adminNotices, pluginVersion } = storeData;
+      
+      let storeInfo = `\n\nSTORE CONTEXT:\n`;
+      storeInfo += `- Store: ${store.name}\n`;
+      storeInfo += `- URL: ${store.url}\n`;
+      storeInfo += `- Plugin version: ${pluginVersion || 'Unknown'}\n`;
+      
+      // Add critical alerts
+      const criticalAlerts = alerts.filter(a => a.severity === 'critical');
+      if (criticalAlerts.length > 0) {
+        storeInfo += `- Critical alerts: ${criticalAlerts.length}\n`;
+        criticalAlerts.slice(0, 3).forEach(alert => {
+          storeInfo += `  - ${alert.message.substring(0, 100)}${alert.message.length > 100 ? '...' : ''}\n`;
+        });
+      }
+      
+      // Add admin notices
+      const stripeNotices = adminNotices.filter(n => n.type && n.type.includes('stripe'));
+      if (stripeNotices.length > 0) {
+        storeInfo += `- Stripe issues detected: ${stripeNotices.length}\n`;
+      }
+      
+      // Add Action Scheduler warnings
+      const hasActionSchedulerErrors = alerts.some(a => 
+        a.message && a.message.includes('Action Scheduler') && a.message.includes('failed')
+      );
+      if (hasActionSchedulerErrors) {
+        storeInfo += `- Action Scheduler/WP-Cron may be broken\n`;
+      }
+      
+      systemPrompt += storeInfo;
+    }
+    
+    // Add system message
+    messages.push({ role: "system", content: systemPrompt });
+    
+    // Add chat history if available
+    if (chatHistory && Array.isArray(chatHistory)) {
+      chatHistory.forEach(msg => {
+        if (msg.role && msg.content) {
+          messages.push({ role: msg.role, content: msg.content });
+        }
+      });
+    }
+    
+    // Add user question
+    messages.push({ role: "user", content: question });
+    
+    // Call DeepSeek API
+    const response = await axios.post(
+      'https://api.deepseek.com/v1/chat/completions',
+      {
+        model: 'deepseek-chat',
+        messages: messages,
+        max_tokens: 2000,
+        temperature: 0.7,
+        stream: false
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        }
+      }
+    );
+    
+    // Extract response text
+    if (response.data && response.data.choices && response.data.choices[0]) {
+      return response.data.choices[0].message.content;
+    } else {
+      throw new Error('Invalid response format from DeepSeek API');
+    }
+    
+  } catch (error) {
+    console.error('DeepSeek API call failed:', error.message);
+    // Fall back to mock response
+    return generateMockAIResponse(question, storeData, chatHistory);
+  }
 }
 
 // ==========================================
@@ -1918,6 +2207,87 @@ app.post("/api/auth/logout", (req, res) => {
 });
 
 // ==========================================
+// SYSTEM ENDPOINTS
+// ==========================================
+
+app.get("/api/system/config", (req, res) => {
+  res.json({
+    allowed_emails: ALLOWED_EMAILS,
+    require_auth: REQUIRE_AUTH,
+    mailgun_configured: !!(process.env.MAILGUN_API_KEY && process.env.MAILGUN_DOMAIN),
+    deepseek_configured: !!process.env.DEEPSEEK_API_KEY,
+    environment: process.env.NODE_ENV || 'development',
+    server_version: "2.6.0",
+    plugin_version: "4.5.1"
+  });
+});
+
+app.post("/api/dashboard/clear-old-alerts", (req, res) => {
+  const now = Date.now();
+  const thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000);
+  const initialCount = alertHistory.length;
+  
+  // Filter out alerts older than 30 days
+  const newAlerts = alertHistory.filter(alert => {
+    const alertTime = new Date(alert.timestamp).getTime();
+    return alertTime >= thirtyDaysAgo;
+  });
+  
+  const clearedCount = initialCount - newAlerts.length;
+  alertHistory = newAlerts;
+  
+  res.json({
+    success: true,
+    cleared: clearedCount,
+    remaining: alertHistory.length,
+    message: `Cleared ${clearedCount} alerts older than 30 days`
+  });
+});
+
+app.get("/api/export/all", (req, res) => {
+  // Sanitize sites: remove or mask sensitive credentials
+  const sanitizedSites = sites.map(site => ({
+    ...site,
+    consumerKey: site.consumerKey ? '••••••••' : null,
+    consumerSecret: site.consumerSecret ? '••••••••' : null
+  }));
+  
+  res.json({
+    timestamp: new Date().toISOString(),
+    server_info: {
+      version: "2.6.0",
+      environment: process.env.NODE_ENV || 'development',
+      uptime: process.uptime(),
+      memory_usage: process.memoryUsage(),
+      sites_count: sites.length,
+      alerts_count: alertHistory.length,
+      auth_tokens_count: Object.keys(authTokens).length
+    },
+    sites: sanitizedSites,
+    alerts: alertHistory.slice(0, 1000), // Limit to 1000 most recent alerts
+    auth_config: {
+      allowed_emails: ALLOWED_EMAILS,
+      require_auth: REQUIRE_AUTH
+    },
+    settings: {
+      mailgun_configured: !!(process.env.MAILGUN_API_KEY && process.env.MAILGUN_DOMAIN),
+      deepseek_configured: !!process.env.DEEPSEEK_API_KEY,
+      alert_email: process.env.ALERT_EMAIL
+    }
+  });
+});
+
+app.post("/api/system/restart", (req, res) => {
+  // This is a placeholder - in production, this would trigger a restart via PM2/Docker
+  console.log('[System] Restart requested via API');
+  res.json({
+    success: true,
+    message: "Restart command acknowledged. Server would restart in production.",
+    note: "This is a placeholder endpoint. In production, this would trigger a restart via PM2, Docker, or systemd."
+  });
+});
+
+// ==========================================
 // 8. DEEP HEALTH WOOCOMMERCE MONITOR
 // ==========================================
 async function checkWooCommerceAPI() {
@@ -1929,9 +2299,13 @@ async function checkWooCommerceAPI() {
   console.log(`[Cron] Starting Deep Health checks for ${sites.length} site(s)...`);
 
   for (const site of sites) {
-    // Skip sites without API credentials
+    // Skip sites without API credentials or health checks disabled
     if (!site.consumerKey || !site.consumerSecret) {
       console.log(`[Cron] ${site.name}: No API credentials, skipping deep checks.`);
+      continue;
+    }
+    if (site.enable_health_checks === false) {
+      console.log(`[Cron] ${site.name}: Health checks disabled, skipping.`);
       continue;
     }
 
