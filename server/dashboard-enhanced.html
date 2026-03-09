@@ -802,8 +802,8 @@ function getAlertIcon(severity) {
 
 function renderCharts(o) {
   // Destroy existing charts if they exist
-  if (window.alertTrendsChart) window.alertTrendsChart.destroy();
-  if (window.featureAdoptionChart) window.featureAdoptionChart.destroy();
+  if (window.alertTrendsChart instanceof Chart) window.alertTrendsChart.destroy();
+  if (window.featureAdoptionChart instanceof Chart) window.featureAdoptionChart.destroy();
   
   // Alert Trends Chart
   const trendsCtx = document.getElementById('alertTrendsChart').getContext('2d');
