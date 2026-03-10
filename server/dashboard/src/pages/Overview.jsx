@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import AlertTrendsChart from "../components/AlertTrendsChart";
+import HealthDistribution from "../components/HealthDistribution";
 
 export default function Overview() {
   const [data, setData] = useState(null);
@@ -24,6 +26,17 @@ export default function Overview() {
         <StatCard label="Total Alerts" value={o.totalAlerts} />
         <StatCard label="Critical" value={o.criticalAlerts} color={o.criticalAlerts > 0 ? "red" : "green"} />
         <StatCard label="High" value={o.highAlerts} color={o.highAlerts > 0 ? "orange" : "green"} />
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-6">
+        <div className="bg-white rounded-xl p-6 shadow-sm">
+          <h2 className="text-lg font-semibold mb-4">Alert Trends (7 days)</h2>
+          <AlertTrendsChart trends={o.alertTrends} />
+        </div>
+        <div className="bg-white rounded-xl p-6 shadow-sm">
+          <h2 className="text-lg font-semibold mb-4">Store Health</h2>
+          <HealthDistribution distribution={o.healthDistribution} />
+        </div>
       </div>
 
       <div className="bg-white rounded-xl p-6 shadow-sm">
