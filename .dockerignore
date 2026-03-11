@@ -9,3 +9,8 @@ assets/
 includes/
 *.php
 *.zip
+server/dashboard/node_modules
+server/dashboard/dist
+server/data
+server/.env
+docs/

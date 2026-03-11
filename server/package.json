@@ -1,14 +1,21 @@
 {
   "name": "woo-monitor",
-  "version": "1.1.0",
-  "description": "WooCommerce Monitoring Server with WP Subscription integration",
-  "main": "server.js",
+  "version": "3.0.0",
+  "description": "WooCommerce Monitoring Server",
+  "main": "src/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js",
-    "test-wps": "node test-wps-integration.js"
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "dashboard:dev": "cd dashboard && npm run dev",
+    "dashboard:build": "cd dashboard && npm run build",
+    "build": "npm run dashboard:build",
+    "migrate": "node src/migrate-from-json.js"
   },
-  "keywords": ["woocommerce", "monitoring", "subscriptions", "wp-subscription", "alerts"],
+  "keywords": [
+    "woocommerce",
+    "monitoring",
+    "alerts"
+  ],
   "author": "Ashbi",
   "license": "ISC",
   "type": "commonjs",
@@ -19,6 +26,7 @@
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
-    "node-cron": "^4.2.1"
+    "node-cron": "^4.2.1",
+    "sql.js": "^1.11.0"
   }
 }

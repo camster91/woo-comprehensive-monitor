@@ -1,11 +1,10 @@
 node_modules/
 .env
 *.log
-server/sites.json
-!server/sites.json
 dist/
 *.zip
 *.backup
 test-syntax.php
 check-braces.php
 exclude.txt
+server/data/*.db
