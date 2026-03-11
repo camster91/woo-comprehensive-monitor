@@ -1,11 +1,11 @@
-FROM node:18-alpine AS dashboard-build
+FROM node:20-alpine AS dashboard-build
 WORKDIR /build
 COPY server/dashboard/package*.json ./
 RUN npm ci
 COPY server/dashboard/ .
 RUN npm run build
 
-FROM node:18-alpine
+FROM node:20-alpine
 WORKDIR /usr/src/app
 
 COPY server/package*.json ./
