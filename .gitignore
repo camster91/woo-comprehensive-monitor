@@ -8,3 +8,4 @@ test-syntax.php
 check-braces.php
 exclude.txt
 server/data/*.db
+.worktrees/
