@@ -13,6 +13,7 @@ RUN npm ci --only=production
 
 COPY server/src/ ./src/
 COPY server/migrations/ ./migrations/
+COPY server/sites.json ./sites.json
 COPY --from=dashboard-build /build/dist ./dashboard/dist
 
 RUN mkdir -p /usr/src/app/data && \
