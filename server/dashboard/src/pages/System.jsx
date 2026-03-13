@@ -1,103 +1,182 @@
 import { useEffect, useState } from "react";
 import { api, apiPost } from "../api/client";
+import { useToast } from "../components/Toast";
+import { formatUptime, formatBytes } from "../utils/time";
+import {
+  Server, Settings, Play, CheckCircle, XCircle, RefreshCw,
+  Cpu, Clock, Shield, Mail, Bot,
+} from "lucide-react";
 
 export default function System() {
-  const [config, setConfig] = useState(null);
-  const [actionResult, setActionResult] = useState(null);
+  const [config, setConfig]   = useState(null);
+  const [results, setResults] = useState({});
   const [running, setRunning] = useState(null);
+  const toast = useToast();
 
-  useEffect(() => {
-    api("/api/system/config").then(setConfig);
-  }, []);
+  useEffect(() => { api("/api/system/config").then(setConfig); }, []);
 
-  const runAction = async (name, fn) => {
-    setRunning(name);
-    setActionResult(null);
+  const runAction = async (key, label, fn, formatter) => {
+    setRunning(key);
     try {
       const res = await fn();
-      setActionResult({ success: true, message: JSON.stringify(res, null, 2) });
+      setResults((prev) => ({ ...prev, [key]: { success: true, data: res, formatted: formatter ? formatter(res) : null } }));
+      toast(`${label} complete`);
     } catch (err) {
-      setActionResult({ success: false, message: err.message });
+      setResults((prev) => ({ ...prev, [key]: { success: false, data: err.message } }));
+      toast(err.message, "error");
     }
     setRunning(null);
   };
 
-  if (!config) return <div className="text-gray-500">Loading...</div>;
+  if (!config) return (
+    <div className="space-y-4 animate-pulse">
+      <div className="grid md:grid-cols-2 gap-4">
+        {[...Array(2)].map((_, i) => (
+          <div key={i} className="bg-white rounded-2xl p-6 h-48 border border-gray-100" />
+        ))}
+      </div>
+    </div>
+  );
 
-  const formatUptime = (seconds) => {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    return h > 0 ? `${h}h ${m}m` : `${m}m`;
-  };
-
-  const formatBytes = (bytes) => {
-    const mb = (bytes / 1024 / 1024).toFixed(1);
-    return `${mb} MB`;
-  };
+  const heapPct = Math.round((config.memory.heapUsed / config.memory.heapTotal) * 100);
+  const rssMb   = (config.memory.rss / 1024 / 1024).toFixed(1);
 
   return (
-    <div className="space-y-6">
-      <div className="grid md:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl p-6 shadow-sm">
-          <h3 className="font-semibold mb-3">Server Info</h3>
-          <div className="space-y-2 text-sm">
-            <Row label="Version" value={config.server_version} />
-            <Row label="Node.js" value={config.node_version} />
-            <Row label="Environment" value={config.environment} />
-            <Row label="Uptime" value={formatUptime(config.uptime)} />
-            <Row label="Memory (RSS)" value={formatBytes(config.memory.rss)} />
-            <Row label="Heap Used" value={formatBytes(config.memory.heapUsed)} />
+    <div className="space-y-5">
+      <div className="grid md:grid-cols-2 gap-5">
+        {/* Server info */}
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+          <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2 mb-4">
+            <Server size={15} className="text-slate-400" /> Server Info
+          </h3>
+          <div className="space-y-3">
+            <InfoRow icon={<Settings size={13} />} label="Version"     value={config.server_version} chip />
+            <InfoRow icon={<Server size={13} />}   label="Node.js"     value={config.node_version} />
+            <InfoRow icon={<Shield size={13} />}   label="Environment" value={config.environment}
+              chipColor={config.environment === "production" ? "green" : "yellow"} chip />
+            <InfoRow icon={<Clock size={13} />}    label="Uptime"      value={formatUptime(config.uptime)} />
+
+            {/* Memory bar */}
+            <div>
+              <div className="flex justify-between text-xs text-slate-500 mb-1">
+                <span className="flex items-center gap-1"><Cpu size={12} /> Heap</span>
+                <span>{formatBytes(config.memory.heapUsed)} / {formatBytes(config.memory.heapTotal)} ({heapPct}%)</span>
+              </div>
+              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${heapPct > 80 ? "bg-red-400" : heapPct > 60 ? "bg-yellow-400" : "bg-blue-400"}`}
+                  style={{ width: `${heapPct}%` }}
+                />
+              </div>
+              <p className="text-xs text-slate-400 mt-1">RSS: {rssMb} MB total process memory</p>
+            </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl p-6 shadow-sm">
-          <h3 className="font-semibold mb-3">Configuration</h3>
-          <div className="space-y-2 text-sm">
-            <Row label="Auth Required" value={config.require_auth ? "Yes" : "No"} />
-            <Row label="Allowed Emails" value={config.allowed_emails.join(", ")} />
-            <Row label="Mailgun" value={config.mailgun_configured ? "Configured" : "Not configured"} />
-            <Row label="DeepSeek AI" value={config.deepseek_configured ? "Configured" : "Not configured"} />
+        {/* Config */}
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+          <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2 mb-4">
+            <Settings size={15} className="text-slate-400" /> Configuration
+          </h3>
+          <div className="space-y-3">
+            <InfoRow icon={<Shield size={13} />} label="Auth Required"
+              value={config.require_auth ? "Yes" : "No"}
+              chipColor={config.require_auth ? "green" : "red"} chip />
+            <InfoRow icon={<Mail size={13} />}   label="Mailgun"
+              value={config.mailgun_configured ? "Configured" : "Not set"}
+              chipColor={config.mailgun_configured ? "green" : "gray"} chip />
+            <InfoRow icon={<Bot size={13} />}    label="DeepSeek AI"
+              value={config.deepseek_configured ? "Configured" : "Not set"}
+              chipColor={config.deepseek_configured ? "green" : "gray"} chip />
+            <div className="pt-2 border-t border-gray-100">
+              <p className="text-xs text-slate-400 mb-1">Allowed emails</p>
+              <div className="flex flex-wrap gap-1">
+                {config.allowed_emails.map((e) => (
+                  <span key={e} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-lg">{e}</span>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl p-6 shadow-sm">
-        <h3 className="font-semibold mb-3">Actions</h3>
-        <div className="flex flex-wrap gap-2">
-          <ActionButton label="Run Health Checks" running={running === "health"}
-            onClick={() => runAction("health", () => apiPost("/api/health-check-all", {}))} />
-          <ActionButton label="Clear Old Alerts (30d)" running={running === "clear"}
-            onClick={() => runAction("clear", () => apiPost("/api/dashboard/clear-old-alerts", { days: 30 }))} />
-          <ActionButton label="Test All Connections" running={running === "test"}
-            onClick={() => runAction("test", () => apiPost("/api/test-connections", {}))} />
-          <ActionButton label="Export Data" running={running === "export"}
-            onClick={() => runAction("export", () => api("/api/export/all"))} />
+      {/* Actions */}
+      <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+        <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2 mb-4">
+          <Play size={15} className="text-slate-400" /> Actions
+        </h3>
+        <div className="flex flex-wrap gap-2 mb-4">
+          <ActionBtn label="Run Health Checks"    running={running === "health"}
+            onClick={() => runAction("health", "Health check", () => apiPost("/api/health-check-all", {}), formatHealthResult)} />
+          <ActionBtn label="Clear Old Alerts (30d)" running={running === "clear"}
+            onClick={() => runAction("clear", "Cleanup", () => apiPost("/api/dashboard/clear-old-alerts", { days: 30 }), (r) => `Cleared ${r.cleared} alerts`)} />
+          <ActionBtn label="Test Connections" running={running === "test"}
+            onClick={() => runAction("test", "Connection test", () => apiPost("/api/test-connections", {}), formatConnResults)} />
+          <ActionBtn label="Export All Data" running={running === "export"}
+            onClick={() => runAction("export", "Export", () => api("/api/export/all"), (r) => `Exported ${r.stores?.length || 0} stores, ${r.alerts?.length || 0} alerts`)} />
         </div>
 
-        {actionResult && (
-          <div className={`mt-3 p-3 rounded-lg text-sm ${actionResult.success ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
-            <pre className="whitespace-pre-wrap overflow-auto max-h-60 text-xs">{actionResult.message}</pre>
+        {/* Action results */}
+        {Object.entries(results).map(([key, result]) => (
+          <div key={key} className={`mt-2 rounded-xl p-4 text-sm border ${result.success ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`}>
+            <div className="flex items-center gap-2 mb-2">
+              {result.success
+                ? <CheckCircle size={14} className="text-green-600" />
+                : <XCircle size={14} className="text-red-600" />}
+              <span className={`font-medium text-xs uppercase tracking-wide ${result.success ? "text-green-700" : "text-red-700"}`}>{key}</span>
+            </div>
+            {result.formatted
+              ? <p className="text-slate-700 text-sm">{result.formatted}</p>
+              : <pre className="text-xs text-slate-600 font-mono whitespace-pre-wrap overflow-auto max-h-48 bg-white/60 rounded-lg p-3">
+                  {typeof result.data === "string" ? result.data : JSON.stringify(result.data, null, 2)}
+                </pre>
+            }
           </div>
-        )}
+        ))}
       </div>
     </div>
   );
 }
 
-function Row({ label, value }) {
+function formatHealthResult(res) {
+  if (!Array.isArray(res.results)) return JSON.stringify(res);
+  const checked = res.results.filter((r) => r.status === "checked").length;
+  const errors  = res.results.filter((r) => r.status === "error").length;
+  const skipped = res.results.filter((r) => r.status === "skipped").length;
+  const issues  = res.results.filter((r) => r.issues > 0).length;
+  return `Checked ${checked} store(s). ${issues > 0 ? `${issues} with issues.` : "All healthy."} Skipped: ${skipped}, Errors: ${errors}`;
+}
+
+function formatConnResults(res) {
+  if (!Array.isArray(res.results)) return JSON.stringify(res);
+  const ok   = res.results.filter((r) => r.status === "checked").length;
+  const fail = res.results.filter((r) => r.status === "error").length;
+  return `${ok} connected, ${fail} failed`;
+}
+
+function InfoRow({ icon, label, value, chip, chipColor }) {
+  const chipColors = {
+    green: "bg-green-100 text-green-700", yellow: "bg-yellow-100 text-yellow-700",
+    red: "bg-red-100 text-red-700", gray: "bg-gray-100 text-gray-600", blue: "bg-blue-100 text-blue-700",
+  };
   return (
-    <div className="flex justify-between py-1 border-b border-gray-100">
-      <span className="text-gray-500">{label}</span>
-      <span className="font-medium">{value}</span>
+    <div className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
+      <span className="flex items-center gap-2 text-xs text-slate-400">{icon}{label}</span>
+      {chip
+        ? <span className={`text-xs font-medium px-2 py-0.5 rounded-lg ${chipColors[chipColor || "blue"]}`}>{value}</span>
+        : <span className="text-sm font-medium text-slate-700">{value}</span>
+      }
     </div>
   );
 }
 
-function ActionButton({ label, onClick, running }) {
+function ActionBtn({ label, onClick, running }) {
   return (
-    <button onClick={onClick} disabled={running}
-      className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 disabled:opacity-50">
-      {running ? "Running..." : label}
+    <button onClick={onClick} disabled={!!running}
+      className="flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-sm font-medium hover:bg-slate-100 disabled:opacity-50 transition-colors">
+      {running ? <><RefreshCw size={13} className="animate-spin" /> Running…</> : <><Play size={13} />{label}</>}
     </button>
   );
 }
+
+
