@@ -1,6 +1,6 @@
 const { Router } = require("express");
-const { createAlert, shouldDeduplicate, sendAlertEmail } = require("../services/alert-service");
-const { upsertStore, getAllStores, getStoreStats, updateStoreStats, touchStore } = require("../services/store-service");
+const { createAlert, shouldDeduplicate, queueAlertEmail } = require("../services/alert-service");
+const { upsertStore, findStoreByUrl, getStoreStats, updateStoreStats, touchStore } = require("../services/store-service");
 
 const router = Router();
 
@@ -8,11 +8,8 @@ router.post("/track-woo-error", async (req, res) => {
   try {
     const { type, error_message, site, url, time } = req.body;
 
-    // Find matching store
-    const stores = getAllStores();
-    const siteObj = stores.find(s =>
-      s.url.includes(site) || (site && site.includes(s.url))
-    );
+    // Resolve store from URL — uses cached store list (no DB scan per request)
+    const siteObj = findStoreByUrl(site);
     const storeId = siteObj?.id || null;
     if (storeId) touchStore(storeId);
 
@@ -31,7 +28,7 @@ router.post("/track-woo-error", async (req, res) => {
         `Time: ${req.body.timestamp}`,
       ].join("\n");
       createAlert({ subject, message, storeId, severity: "critical", type: "dispute" });
-      await sendAlertEmail(subject, message);
+      queueAlertEmail(subject, message, storeId, "dispute");
       return res.json({ success: true });
     }
 
@@ -41,11 +38,19 @@ router.post("/track-woo-error", async (req, res) => {
       let message = `Critical health issues detected!\nStore: ${req.body.store_name}\nURL: ${req.body.store_url}\n\nCritical Issues:\n`;
       (req.body.critical_checks || []).forEach((check, i) => {
         message += `${i + 1}. ${check.name}\n`;
-        Object.entries(check.details || {}).forEach(([key, val]) => { message += `   - ${key}: ${val}\n`; });
+        Object.entries(check.details || {}).forEach(([key, val]) => {
+          message += `   - ${key}: ${val}\n`;
+        });
       });
-      const matchedStore = stores.find(s => s.url.includes(req.body.store_url) || req.body.store_url?.includes(s.url));
-      createAlert({ subject, message, storeId: matchedStore?.id || null, severity: "critical", type: "health" });
-      await sendAlertEmail(subject, message);
+      const matchedStore = findStoreByUrl(req.body.store_url);
+      createAlert({
+        subject,
+        message,
+        storeId: matchedStore?.id || null,
+        severity: "critical",
+        type: "health",
+      });
+      queueAlertEmail(subject, message, matchedStore?.id || null, "health");
       return res.json({ success: true });
     }
 
@@ -68,6 +73,7 @@ router.post("/track-woo-error", async (req, res) => {
       const subject = `PLUGIN ACTIVATED: ${req.body.store_name}`;
       const message = `Store: ${req.body.store_name}\nURL: ${req.body.store_url}\nPlugin: ${req.body.plugin_version}\nWooCommerce: ${req.body.woocommerce_version}`;
       createAlert({ subject, message, storeId: req.body.store_id, severity: "success", type: "lifecycle" });
+      // No email for activation — just informational
       return res.json({ success: true });
     }
 
@@ -75,7 +81,7 @@ router.post("/track-woo-error", async (req, res) => {
     if (type === "plugin_deactivated") {
       const subject = `PLUGIN DEACTIVATED: ${req.body.store_name}`;
       const message = `Store: ${req.body.store_name}\nURL: ${req.body.store_url}\nTime: ${req.body.timestamp}`;
-      createAlert({ subject, message, storeId: siteObj?.id || null, severity: "warning", type: "lifecycle" });
+      createAlert({ subject, message, storeId: storeId || null, severity: "warning", type: "lifecycle" });
       return res.json({ success: true });
     }
 
@@ -83,8 +89,14 @@ router.post("/track-woo-error", async (req, res) => {
     if (type === "subscription_cancelled") {
       const subject = `Subscription Cancelled: ${req.body.store_name}`;
       const message = `Subscription #${req.body.subscription_id}\nCustomer: ${req.body.customer_name} (${req.body.customer_email})\nProduct: ${req.body.product_name}\nTotal: ${req.body.total}\nCancelled By: ${req.body.cancelled_by}`;
-      const matchedStore = stores.find(s => s.url.includes(req.body.store_url) || req.body.store_url?.includes(s.url));
-      createAlert({ subject, message, storeId: matchedStore?.id || null, severity: "medium", type: "subscription" });
+      const matchedStore = findStoreByUrl(req.body.store_url);
+      createAlert({
+        subject,
+        message,
+        storeId: matchedStore?.id || null,
+        severity: "medium",
+        type: "subscription",
+      });
       return res.json({ success: true });
     }
 
@@ -94,8 +106,14 @@ router.post("/track-woo-error", async (req, res) => {
       const subject = `Price Adjustment (${status}): ${req.body.store_name}`;
       const message = `Subscription #${req.body.subscription_id}\nAmount: ${req.body.amount}\nStatus: ${req.body.status}\nTrigger: ${req.body.trigger}\nTime: ${req.body.timestamp}`;
       const severity = req.body.status === "charged" ? "success" : "high";
-      const matchedStore = stores.find(s => s.url.includes(req.body.store_url) || req.body.store_url?.includes(s.url));
-      createAlert({ subject, message, storeId: matchedStore?.id || null, severity, type: "subscription" });
+      const matchedStore = findStoreByUrl(req.body.store_url);
+      createAlert({
+        subject,
+        message,
+        storeId: matchedStore?.id || null,
+        severity,
+        type: "subscription",
+      });
       return res.json({ success: true });
     }
 
@@ -103,12 +121,22 @@ router.post("/track-woo-error", async (req, res) => {
     if (type === "admin_notice") {
       const stats = getStoreStats(req.body.store_id);
       const notices = stats?.admin_notices || [];
-      notices.unshift({ type: req.body.notice_type, message: req.body.message, timestamp: req.body.timestamp });
+      notices.unshift({
+        type: req.body.notice_type,
+        message: req.body.message,
+        timestamp: req.body.timestamp,
+      });
       if (notices.length > 20) notices.length = 20;
       updateStoreStats(req.body.store_id, { adminNotices: notices });
 
       const subject = `Admin Notice: ${req.body.notice_type} on ${req.body.store_name}`;
-      createAlert({ subject, message: req.body.message || "No details", storeId: req.body.store_id, severity: "medium", type: "admin_notice" });
+      createAlert({
+        subject,
+        message: req.body.message || "No details",
+        storeId: req.body.store_id,
+        severity: "medium",
+        type: "admin_notice",
+      });
       return res.json({ success: true });
     }
 
@@ -127,7 +155,7 @@ router.post("/track-woo-error", async (req, res) => {
     const subject = `${category} on ${site}: ${type}`;
     const message = `Site: ${site}\nURL: ${url || "Unknown"}\nError: ${error_message}\nTime: ${time || new Date().toISOString()}`;
     createAlert({ subject, message, storeId, severity, type: "error" });
-    await sendAlertEmail(subject, message);
+    queueAlertEmail(subject, message, storeId, type);
 
     return res.json({ success: true });
   } catch (err) {

@@ -9,8 +9,9 @@ if (!fs.existsSync(sitesPath)) {
   process.exit(0);
 }
 
-(async () => {
-  await initDB();
+// initDB is now synchronous (better-sqlite3)
+(() => {
+  initDB();
   const sites = JSON.parse(fs.readFileSync(sitesPath, "utf8"));
   console.log(`Migrating ${sites.length} stores from sites.json...`);
 

@@ -1,1 +1,26 @@
-[]
+[
+  {
+    "id": "store-6e1ffb68",
+    "name": "4EVRstrong",
+    "url": "https://4evrstrong.com",
+    "plugin_version": "4.4.9",
+    "woocommerce_version": "10.5.3",
+    "last_seen": "2026-03-05T17:09:55.200Z"
+  },
+  {
+    "id": "store-0525b1a3",
+    "name": "Aivilo",
+    "url": "https://aiviloskincare.com",
+    "plugin_version": "4.4.8",
+    "woocommerce_version": "10.5.1",
+    "last_seen": "2026-03-05T17:35:39.140Z"
+  },
+  {
+    "id": "store-2a02c65a",
+    "name": "Amara Natural",
+    "url": "https://amaranatural.com",
+    "plugin_version": "4.4.8",
+    "woocommerce_version": "10.5.1",
+    "last_seen": "2026-03-05T17:36:11.843Z"
+  }
+]

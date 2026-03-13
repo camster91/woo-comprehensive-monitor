@@ -1,39 +1,67 @@
-const initSqlJs = require("sql.js");
+/**
+ * Database layer — better-sqlite3
+ *
+ * Replaces sql.js (WASM in-memory) which caused OOM crashes under load:
+ *   - sql.js serialized the entire DB to a Buffer on every write (saveDB)
+ *   - fs.writeFileSync blocked the Node.js event loop on every save
+ *
+ * better-sqlite3 fixes this:
+ *   - Native C binding — no WASM overhead
+ *   - WAL mode — incremental writes, concurrent reads without blocking
+ *   - No full-DB serialization needed ever
+ *   - Prepared statement cache — fast repeated queries
+ */
+
+const Database = require("better-sqlite3");
 const fs = require("fs");
 const path = require("path");
 
 let _db = null;
-let _dbPath = null;
-let _saveTimer = null;
+const _stmtCache = new Map();
 
-async function initDB(dbPath) {
-  _dbPath = dbPath || process.env.DB_PATH || path.join(__dirname, "../data/woo-monitor.db");
+function initDB(dbPath) {
+  const resolvedPath =
+    dbPath ||
+    process.env.DB_PATH ||
+    path.join(__dirname, "../data/woo-monitor.db");
 
-  // Ensure directory exists
-  const dir = path.dirname(_dbPath);
+  // Ensure data directory exists
+  const dir = path.dirname(resolvedPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-  const SQL = await initSqlJs();
+  _db = new Database(resolvedPath);
 
-  // Load existing database or create new one
-  if (fs.existsSync(_dbPath)) {
-    const buffer = fs.readFileSync(_dbPath);
-    _db = new SQL.Database(buffer);
-  } else {
-    _db = new SQL.Database();
-  }
+  // WAL mode: writers don't block readers, much better concurrent performance
+  _db.pragma("journal_mode = WAL");
+  // NORMAL: flush on checkpoint, not every write — safe enough, much faster
+  _db.pragma("synchronous = NORMAL");
+  // 16 MB page cache
+  _db.pragma("cache_size = -16384");
+  // Keep temp tables in memory
+  _db.pragma("temp_store = MEMORY");
+  // Enable foreign key enforcement
+  _db.pragma("foreign_keys = ON");
+  // WAL auto-checkpoint at 1000 pages (~4 MB)
+  _db.pragma("wal_autocheckpoint = 1000");
 
-  // Run migrations
+  // Run migrations (idempotent — uses CREATE TABLE IF NOT EXISTS)
   const migration = fs.readFileSync(
     path.join(__dirname, "../migrations/001_initial.sql"),
     "utf8"
   );
-  _db.run(migration);
+  _db.exec(migration);
 
-  // Save after migration
-  saveDB();
+  // Graceful shutdown: flush WAL on exit
+  process.on("exit", () => {
+    try {
+      if (_db && _db.open) {
+        _db.pragma("wal_checkpoint(TRUNCATE)");
+        _db.close();
+      }
+    } catch (_) {}
+  });
 
-  console.log(`Database initialized at ${_dbPath}`);
+  console.log(`[DB] Initialized (WAL mode) at ${resolvedPath}`);
   return _db;
 }
 
@@ -42,60 +70,37 @@ function getDB() {
   return _db;
 }
 
-// Persist database to disk (debounced)
-function saveDB() {
-  if (!_db || !_dbPath) return;
-  const data = _db.export();
-  const buffer = Buffer.from(data);
-  fs.writeFileSync(_dbPath, buffer);
+/**
+ * Get or compile a prepared statement (cached for performance).
+ * Repeated calls with the same SQL reuse the same Statement object,
+ * avoiding repeated parse overhead on hot paths like touchStore / createAlert.
+ */
+function prepare(sql) {
+  if (!_stmtCache.has(sql)) {
+    _stmtCache.set(sql, getDB().prepare(sql));
+  }
+  return _stmtCache.get(sql);
 }
 
-// Schedule a save (coalesces frequent writes)
-function scheduleSave() {
-  if (_saveTimer) clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(saveDB, 500);
-}
-
-// Helper: run a statement and save
+/** Execute a write statement (no return value needed) */
 function run(sql, params = []) {
-  const db = getDB();
-  db.run(sql, params);
-  scheduleSave();
+  return prepare(sql).run(...params);
 }
 
-// Helper: get one row
+/** Get a single row (returns object or undefined) */
 function get(sql, params = []) {
-  const db = getDB();
-  const stmt = db.prepare(sql);
-  stmt.bind(params);
-  let row = null;
-  if (stmt.step()) {
-    row = stmt.getAsObject();
-  }
-  stmt.free();
-  return row;
+  return prepare(sql).get(...params) || null;
 }
 
-// Helper: get all rows
+/** Get all rows */
 function all(sql, params = []) {
-  const db = getDB();
-  const stmt = db.prepare(sql);
-  stmt.bind(params);
-  const rows = [];
-  while (stmt.step()) {
-    rows.push(stmt.getAsObject());
-  }
-  stmt.free();
-  return rows;
+  return prepare(sql).all(...params);
 }
 
-// Helper: run INSERT and return lastID
+/** Insert a row and return the new row's id */
 function insert(sql, params = []) {
-  const db = getDB();
-  db.run(sql, params);
-  const lastId = db.exec("SELECT last_insert_rowid() as id")[0].values[0][0];
-  scheduleSave();
-  return lastId;
+  const info = prepare(sql).run(...params);
+  return info.lastInsertRowid;
 }
 
-module.exports = { initDB, getDB, run, get, all, insert, saveDB };
+module.exports = { initDB, getDB, run, get, all, insert };
