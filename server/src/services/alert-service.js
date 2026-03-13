@@ -13,7 +13,10 @@ const { run, get, all, insert } = require("../db");
 const axios = require("axios");
 
 // ---------------------------------------------------------------------------
-// Alert dedup — prevents the same error flooding the alerts table
+// Alert dedup — prevents the same error flooding the alerts table.
+//
+// Restart-safe: on a cache miss, falls back to a DB query so a fresh server
+// restart after a redeploy doesn't re-fire every dedup key simultaneously.
 // ---------------------------------------------------------------------------
 const lastAlertTimes = {};
 const DEDUP_INTERVAL_MS = 2 * 60 * 60 * 1000; // 2 hours
@@ -23,13 +26,32 @@ function shouldDeduplicate(key) {
   if (lastAlertTimes[key] && now - lastAlertTimes[key] < DEDUP_INTERVAL_MS) {
     return true;
   }
+
+  // Cache miss (new key or server just restarted) — check the DB for a recent
+  // alert with this dedup_key so we don't re-fire storms after deploys.
+  if (!lastAlertTimes[key]) {
+    const recent = get(
+      `SELECT timestamp FROM alerts
+       WHERE dedup_key = ? AND timestamp > datetime('now', '-2 hours')
+       ORDER BY timestamp DESC LIMIT 1`,
+      [key]
+    );
+    if (recent) {
+      // Populate in-memory cache from DB so subsequent calls are fast
+      lastAlertTimes[key] = new Date(recent.timestamp + "Z").getTime();
+      if (now - lastAlertTimes[key] < DEDUP_INTERVAL_MS) return true;
+    }
+  }
+
   lastAlertTimes[key] = now;
   return false;
 }
 
 // ---------------------------------------------------------------------------
-// Email cooldown — per store+type, separate from alert dedup
-// Survives alert dedup reset; prevents email floods after restarts
+// Email cooldown — per store+type, separate from alert dedup.
+//
+// Restart-safe: on a cache miss, queries the DB for a recent alert of the
+// same store+type so a redeploy doesn't spam emails for all 25 stores.
 // ---------------------------------------------------------------------------
 const emailCooldowns = new Map();
 const EMAIL_COOLDOWN_MS = 30 * 60 * 1000; // 30 minutes per store+type
@@ -38,6 +60,24 @@ function shouldSuppressEmail(storeId, type) {
   const key = `${storeId ?? "global"}:${type ?? "general"}`;
   const last = emailCooldowns.get(key);
   if (last && Date.now() - last < EMAIL_COOLDOWN_MS) return true;
+
+  // Cache miss — check DB for a recent alert of this store+type as a proxy
+  // for "email was recently sent." Better than spamming on every restart.
+  if (!last) {
+    const recent = get(
+      `SELECT timestamp FROM alerts
+       WHERE (store_id = ? OR (store_id IS NULL AND ? IS NULL))
+         AND (type = ? OR (type IS NULL AND ? IS NULL))
+         AND timestamp > datetime('now', '-30 minutes')
+       ORDER BY timestamp DESC LIMIT 1`,
+      [storeId, storeId, type, type]
+    );
+    if (recent) {
+      emailCooldowns.set(key, new Date(recent.timestamp + "Z").getTime());
+      return true;
+    }
+  }
+
   emailCooldowns.set(key, Date.now());
   return false;
 }
@@ -45,11 +85,11 @@ function shouldSuppressEmail(storeId, type) {
 // ---------------------------------------------------------------------------
 // CRUD
 // ---------------------------------------------------------------------------
-function createAlert({ subject, message, storeId = null, severity = "medium", type = null }) {
+function createAlert({ subject, message, storeId = null, severity = "medium", type = null, dedupKey = null }) {
   return insert(
-    `INSERT INTO alerts (store_id, subject, message, severity, type, timestamp)
-     VALUES (?, ?, ?, ?, ?, datetime('now'))`,
-    [storeId, subject, message, severity, type]
+    `INSERT INTO alerts (store_id, subject, message, severity, type, dedup_key, timestamp)
+     VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
+    [storeId, subject, message, severity, type, dedupKey]
   );
 }
 

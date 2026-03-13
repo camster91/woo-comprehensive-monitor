@@ -140,6 +140,19 @@ router.post("/track-woo-error", async (req, res) => {
       return res.json({ success: true });
     }
 
+    // --- Heartbeat (lightweight keepalive from the plugin health cron) ---
+    if (type === "heartbeat") {
+      // touchStore already called above if store was found by URL
+      if (!storeId) {
+        // Store not found — register it minimally so last_seen is tracked
+        const { upsertStore } = require("../services/store-service");
+        if (req.body.store_id && req.body.store_name && req.body.store_url) {
+          upsertStore({ id: req.body.store_id, name: req.body.store_name, url: req.body.store_url });
+        }
+      }
+      return res.json({ success: true });
+    }
+
     // --- Regular frontend errors ---
     const dedupKey = `error_${site}_${type}_${(error_message || "").substring(0, 50)}`;
     if (shouldDeduplicate(dedupKey)) {
@@ -154,7 +167,7 @@ router.post("/track-woo-error", async (req, res) => {
 
     const subject = `${category} on ${site}: ${type}`;
     const message = `Site: ${site}\nURL: ${url || "Unknown"}\nError: ${error_message}\nTime: ${time || new Date().toISOString()}`;
-    createAlert({ subject, message, storeId, severity, type: "error" });
+    createAlert({ subject, message, storeId, severity, type: "error", dedupKey });
     queueAlertEmail(subject, message, storeId, type);
 
     return res.json({ success: true });

@@ -114,4 +114,52 @@ async function checkAllStores() {
   return mapped;
 }
 
-module.exports = { checkStore, checkAllStores };
+/**
+ * Detect stores that have gone silent — last_seen > threshold with no recent
+ * heartbeat. Only fires for stores that were active within the past 7 days
+ * (avoids alerting for stores that were just added but never activated).
+ *
+ * Threshold: 26 hours — slightly longer than one health-check cycle (twicedaily
+ * = 12h) plus drift, so a single missed cron doesn't trigger an alert.
+ */
+const SILENCE_THRESHOLD_HOURS = 26;
+const SILENCE_MAX_AGE_DAYS = 7; // Don't alert for stores not seen in >7 days (probably removed)
+
+async function checkSilentStores() {
+  const stores = getAllStores();
+  const now = Date.now();
+
+  for (const store of stores) {
+    if (!store.last_seen) continue;
+
+    const lastSeenMs = new Date(store.last_seen + "Z").getTime();
+    const hoursSilent = (now - lastSeenMs) / (1000 * 60 * 60);
+
+    // Skip stores that were never really active or are very stale (likely removed)
+    if (hoursSilent < SILENCE_THRESHOLD_HOURS || hoursSilent > SILENCE_MAX_AGE_DAYS * 24) continue;
+
+    const dedupKey = `silent_${store.id}`;
+    if (!shouldDeduplicate(dedupKey)) {
+      const h = Math.round(hoursSilent);
+      const subject = `Store Silent: ${store.name} (${h}h)`;
+      const message = [
+        `Store has not reported in ${h} hours.`,
+        `Store:     ${store.name}`,
+        `URL:       ${store.url}`,
+        `Last seen: ${store.last_seen} UTC`,
+        ``,
+        `Possible causes:`,
+        `  - Plugin was deactivated`,
+        `  - Site is down or unreachable`,
+        `  - WP-Cron is broken (DISABLE_WP_CRON or hosting issue)`,
+        `  - Monitoring server URL changed in plugin settings`,
+      ].join("\n");
+
+      createAlert({ subject, message, storeId: store.id, severity: "high", type: "silent", dedupKey });
+      queueAlertEmail(subject, message, store.id, "silent");
+      console.log(`[Health] Silent store alert: ${store.name} (${h}h silent)`);
+    }
+  }
+}
+
+module.exports = { checkStore, checkAllStores, checkSilentStores };

@@ -12,9 +12,39 @@ function createApp() {
   app.set("trust proxy", 1);
 
   // -------------------------------------------------------------------------
+  // CORS
+  //
+  // /api/track-woo-error — wide-open CORS: WordPress plugins call this from
+  //   any domain (each client's WooCommerce store).
+  //
+  // All other endpoints — restricted to the configured FQDN + localhost dev.
+  //   The React dashboard is served by the same Express server so its requests
+  //   are same-origin and don't need CORS at all, but we still lock down
+  //   cross-origin access to prevent CSRF from third-party sites.
+  // -------------------------------------------------------------------------
+  app.use("/api/track-woo-error", cors()); // wildcard for plugin callbacks
+
+  const allowedOrigins = [
+    process.env.APP_FQDN || "https://woo.ashbi.ca",
+    "http://localhost:3000",
+    "http://localhost:5173",
+  ].concat(
+    (process.env.ALLOWED_ORIGINS || "").split(",").map(s => s.trim()).filter(Boolean)
+  );
+
+  app.use(cors({
+    origin(origin, cb) {
+      // Allow same-origin requests (no Origin header) — curl, server-to-server, etc.
+      if (!origin) return cb(null, true);
+      if (allowedOrigins.includes(origin)) return cb(null, true);
+      cb(Object.assign(new Error(`CORS: ${origin} not allowed`), { status: 403 }));
+    },
+    credentials: true,
+  }));
+
+  // -------------------------------------------------------------------------
   // Core middleware
   // -------------------------------------------------------------------------
-  app.use(cors());
   // Limit request body to 200 KB — protects against accidental or malicious large payloads
   app.use(express.json({ limit: "200kb" }));
   app.use(cookieParser());

@@ -70,6 +70,14 @@ class WCM_Health_Monitor {
         $this->send_health_alerts( $checks );
         $this->update_health_score( $checks );
 
+        // Send a lightweight heartbeat to the monitoring server so it can detect
+        // stores that go silent (plugin deactivated, site down, cron broken).
+        // This fires on every successful health-check run regardless of result.
+        WCM_Helpers::send_event_to_server( 'heartbeat', array(
+            'plugin_version' => WCM_VERSION,
+            'health_score'   => $this->get_health_score(),
+        ) );
+
         return $checks;
     }
 
