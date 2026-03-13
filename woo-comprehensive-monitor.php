@@ -3,7 +3,7 @@
  * Plugin Name: WooCommerce Comprehensive Monitor & Dispute Protection
  * Plugin URI: https://ashbi.ca
  * Description: Complete WooCommerce monitoring, error tracking, dispute protection, and health alerts. Combines frontend monitoring, dispute evidence generation, and centralized health reporting.
- * Version: 4.5.4
+ * Version: 4.5.5
  * Author: Ashbi
  * Author URI: https://ashbi.ca
  * License: GPL2
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('WCM_VERSION', '4.5.4');
+define('WCM_VERSION', '4.5.5');
 define('WCM_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WCM_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('WCM_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -201,6 +201,7 @@ class WooComprehensiveMonitor {
         wp_clear_scheduled_hook( 'wcm_daily_health_check' );
         wp_clear_scheduled_hook( 'wcm_hourly_dispute_check' );
         wp_clear_scheduled_hook( 'wcm_daily_log_cleanup' );
+        wp_clear_scheduled_hook( 'wcm_check_for_updates' );
 
         // Health check: twicedaily (was hourly — too expensive for 14 heavy DB checks)
         if ( ! wp_next_scheduled( 'wcm_daily_health_check' ) ) {
@@ -211,6 +212,9 @@ class WooComprehensiveMonitor {
         }
         if ( ! wp_next_scheduled( 'wcm_daily_log_cleanup' ) ) {
             wp_schedule_event( time(), 'daily', 'wcm_daily_log_cleanup' );
+        }
+        if ( ! wp_next_scheduled( 'wcm_check_for_updates' ) ) {
+            wp_schedule_event( time(), 'twicedaily', 'wcm_check_for_updates' );
         }
 
         // Log the upgrade
@@ -458,6 +462,11 @@ class WooComprehensiveMonitor {
         // Schedule log cleanup
         if (!wp_next_scheduled('wcm_daily_log_cleanup')) {
             wp_schedule_event(time(), 'daily', 'wcm_daily_log_cleanup');
+        }
+
+        // Schedule auto-update check (moved from WCM_Auto_Updater constructor)
+        if (!wp_next_scheduled('wcm_check_for_updates')) {
+            wp_schedule_event(time(), 'twicedaily', 'wcm_check_for_updates');
         }
     }
 

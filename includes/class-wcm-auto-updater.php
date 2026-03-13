@@ -59,11 +59,8 @@ class WCM_Auto_Updater {
 
         // Add update check cron
         add_action( 'wcm_check_for_updates', array( $this, 'force_update_check' ) );
-        
-        // Schedule update check if not already scheduled
-        if ( ! wp_next_scheduled( 'wcm_check_for_updates' ) ) {
-            wp_schedule_event( time(), 'twicedaily', 'wcm_check_for_updates' );
-        }
+        // NOTE: cron scheduling is handled in the main plugin file at activation/upgrade.
+        // wp_next_scheduled() reads from the autoloaded cron option on every page load.
 
         // Add auto-update setting filter
         add_filter( 'auto_update_plugin', array( $this, 'maybe_auto_update' ), 10, 2 );
