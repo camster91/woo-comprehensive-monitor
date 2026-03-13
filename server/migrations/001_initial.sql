@@ -29,6 +29,9 @@ CREATE TABLE IF NOT EXISTS alerts (
 CREATE INDEX IF NOT EXISTS idx_alerts_store ON alerts(store_id);
 CREATE INDEX IF NOT EXISTS idx_alerts_severity ON alerts(severity);
 CREATE INDEX IF NOT EXISTS idx_alerts_timestamp ON alerts(timestamp DESC);
+-- Expression index for the 7-day trend GROUP BY date(timestamp) query.
+-- SQLite supports expression indexes from v3.31.0 (Jan 2020).
+CREATE INDEX IF NOT EXISTS idx_alerts_date ON alerts(date(timestamp));
 
 CREATE TABLE IF NOT EXISTS store_stats (
   store_id TEXT PRIMARY KEY,

@@ -1059,16 +1059,16 @@ class WCM_Health_Monitor {
         
         // Reschedule our own health check if missing
         if ( ! wp_next_scheduled( 'wcm_daily_health_check' ) ) {
-            wp_schedule_event( time(), 'hourly', 'wcm_daily_health_check' );
+            wp_schedule_event( time(), 'twicedaily', 'wcm_daily_health_check' ); // was 'hourly'
             $results['rescheduled_health_check'] = true;
         }
-        
+
         // Reschedule dispute check if missing
         if ( ! wp_next_scheduled( 'wcm_hourly_dispute_check' ) ) {
             wp_schedule_event( time(), 'hourly', 'wcm_hourly_dispute_check' );
             $results['rescheduled_dispute_check'] = true;
         }
-        
+
         // Reschedule log cleanup if missing
         if ( ! wp_next_scheduled( 'wcm_daily_log_cleanup' ) ) {
             wp_schedule_event( time(), 'daily', 'wcm_daily_log_cleanup' );

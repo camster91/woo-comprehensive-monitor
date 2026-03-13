@@ -75,26 +75,10 @@
             });
         });
         
-        // Track "Place Order" button clicks to detect broken buttons
-        $('button[name="woocommerce_checkout_place_order"]').on('click', function() {
-            // Store timestamp to detect if button is broken
-            localStorage.setItem('wcm_checkout_click', Date.now());
-        });
-        
-        // Check if button was clicked but form wasn't submitted (broken button)
-        $(window).on('beforeunload', function() {
-            var clickTime = localStorage.getItem('wcm_checkout_click');
-            if (clickTime && (Date.now() - clickTime < 5000)) {
-                // Button was clicked recently but page is unloading (form not submitted)
-                reportError({
-                    error_type: 'checkout_button_broken',
-                    error_message: 'Checkout button clicked but form not submitted - possible JavaScript error preventing submission',
-                    page_url: window.location.href,
-                    user_agent: navigator.userAgent
-                });
-            }
-            localStorage.removeItem('wcm_checkout_click');
-        });
+        // NOTE: "beforeunload" broken-button detection was removed.
+        // It fired on EVERY checkout redirect (including successful orders),
+        // generating a false-positive "checkout_button_broken" error on every sale.
+        // Checkout errors are already captured via the checkout_error event above.
     }
     
     // Track "Add to Cart" errors
@@ -163,22 +147,34 @@
         };
     }
     
-    // Track form validation errors
-    $('form').on('invalid', function(event) {
-        if (event.target.checkValidity && !event.target.checkValidity()) {
-            reportError({
-                error_type: 'form_validation_error',
-                error_message: 'Form validation failed for ' + event.target.name + ': ' + event.target.validationMessage,
-                page_url: window.location.href,
-                user_agent: navigator.userAgent
-            });
-        }
-    }, true);
+    // NOTE: form_validation_error tracking removed.
+    // HTML5 `invalid` events fire on every empty required field when a user clicks submit
+    // before completing the form. This is expected behaviour, not an application error,
+    // and generated thousands of noise alerts per day on busy checkout pages.
     
+    /**
+     * Client-side deduplication — prevents the same error flooding the server
+     * if it repeats in a loop (e.g. a broken setInterval or repeated AJAX failure).
+     * Tracks error fingerprints with a 30-second cool-down per unique message.
+     */
+    var _reportedErrors = {};
+    function isDuplicate(errorData) {
+        var key = (errorData.error_type || '') + '|' + (errorData.error_message || '').slice(0, 100);
+        var now = Date.now();
+        if (_reportedErrors[key] && (now - _reportedErrors[key]) < 30000) {
+            return true;
+        }
+        _reportedErrors[key] = now;
+        return false;
+    }
+
     /**
      * Report error to monitoring server
      */
     function reportError(errorData) {
+        // Skip duplicates within 30 seconds
+        if (isDuplicate(errorData)) { return; }
+
         // Add store information
         errorData.store_url = wcm_tracker.store_url;
         errorData.store_name = wcm_tracker.store_name;

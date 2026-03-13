@@ -22,10 +22,8 @@ class WCM_Dispute_Manager {
     private function init_hooks() {
         add_action( 'rest_api_init', array( $this, 'register_webhook_endpoint' ) );
         add_action( 'woocommerce_checkout_order_processed', array( $this, 'record_subscription_acknowledgment' ), 10, 3 );
-
-        if ( ! wp_next_scheduled( 'wcm_hourly_dispute_check' ) ) {
-            wp_schedule_event( time(), 'hourly', 'wcm_hourly_dispute_check' );
-        }
+        // NOTE: cron scheduling is handled in the main plugin file at activation/upgrade.
+        // Calling wp_next_scheduled() here would run a DB query on every page load.
         add_action( 'wcm_hourly_dispute_check', array( $this, 'check_for_disputes' ) );
     }
 
@@ -370,10 +368,23 @@ class WCM_Dispute_Manager {
             return;
         }
 
-        $response = wp_remote_get( 'https://api.stripe.com/v1/disputes?limit=10', array(
-            'headers' => array( 'Authorization' => 'Bearer ' . $this->stripe_api_key ),
-            'timeout' => 15,
-        ) );
+        // Debounce: Stripe webhooks are the real-time path; this poll is a safety net.
+        // Cache a "ran" marker for 50 minutes so WP-Cron edge-cases can't double-fire it
+        // and a slow Stripe API call (was 15s timeout) can't block a page request twice.
+        $debounce_key = 'wcm_stripe_disputes_poll';
+        if ( false !== get_transient( $debounce_key ) ) {
+            return;
+        }
+        // Set immediately — prevents a second concurrent cron process from also running.
+        set_transient( $debounce_key, true, 50 * MINUTE_IN_SECONDS );
+
+        $response = wp_remote_get(
+            'https://api.stripe.com/v1/disputes?limit=10&status=warning_needs_response',
+            array(
+                'headers' => array( 'Authorization' => 'Bearer ' . $this->stripe_api_key ),
+                'timeout' => 10, // was 15 — reduces max page-hang time if WP-Cron runs inline
+            )
+        );
 
         if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
             return;
@@ -387,17 +398,22 @@ class WCM_Dispute_Manager {
         global $wpdb;
         $table = $wpdb->prefix . 'wcm_dispute_evidence';
 
+        // Batch dedup: one IN() query instead of one SELECT per dispute.
+        $dispute_ids  = array_map( function ( $d ) { return $d->id; }, $body->data );
+        $placeholders = implode( ', ', array_fill( 0, count( $dispute_ids ), '%s' ) );
+        // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+        $existing     = $wpdb->get_col(
+            $wpdb->prepare(
+                "SELECT stripe_dispute_id FROM {$table} WHERE stripe_dispute_id IN ({$placeholders})",
+                $dispute_ids
+            )
+        );
+        $existing_set = array_flip( $existing );
+
         foreach ( $body->data as $dispute ) {
-            // Skip if already tracked
-            $exists = $wpdb->get_var( $wpdb->prepare(
-                "SELECT id FROM {$table} WHERE stripe_dispute_id = %s",
-                $dispute->id
-            ) );
-            if ( $exists ) {
+            if ( isset( $existing_set[ $dispute->id ] ) ) {
                 continue;
             }
-
-            // Process as new dispute
             $this->handle_new_dispute( $dispute );
         }
     }

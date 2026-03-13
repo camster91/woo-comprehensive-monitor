@@ -52,42 +52,59 @@ class WCM_Helpers {
             return false;
         }
         $product_id   = $product->get_id();
+
+        // Request-level static cache. Without this, every cart item on checkout
+        // triggers 8 get_post_meta() reads for the same product ID if it appears
+        // multiple times (bundles, loops, evidence generation, etc.).
+        static $cache = array();
+        if ( array_key_exists( $product_id, $cache ) ) {
+            return $cache[ $product_id ];
+        }
+
         $product_type = $product->get_type();
+        $result       = false;
 
         // WooCommerce Subscriptions
         if ( in_array( $product_type, array( 'subscription', 'variable-subscription', 'subscription_variation' ), true ) ) {
-            return true;
-        }
-        if ( 'variation' === $product_type ) {
+            $result = true;
+        } elseif ( ! $result && 'variation' === $product_type ) {
             $parent = wc_get_product( $product->get_parent_id() );
             if ( $parent && 'variable-subscription' === $parent->get_type() ) {
-                return true;
+                $result = true;
             }
         }
 
         // WPSubscription Pro
-        $wps_keys = array( '_subscrpt_enabled', 'subscription_enable', '_wps_subscription_product', '_wps_subscription_type', '_wps_subscription', '_wps_subscription_enable' );
-        foreach ( $wps_keys as $key ) {
-            $val = get_post_meta( $product_id, $key, true );
-            if ( in_array( $val, array( 'yes', 'true', '1', 1, true ), true ) || ( ! empty( $val ) && '_wps_subscription_type' === $key ) ) {
-                return true;
+        if ( ! $result ) {
+            $wps_keys = array( '_subscrpt_enabled', 'subscription_enable', '_wps_subscription_product', '_wps_subscription_type', '_wps_subscription', '_wps_subscription_enable' );
+            foreach ( $wps_keys as $key ) {
+                $val = get_post_meta( $product_id, $key, true );
+                if ( in_array( $val, array( 'yes', 'true', '1', 1, true ), true ) || ( ! empty( $val ) && '_wps_subscription_type' === $key ) ) {
+                    $result = true;
+                    break;
+                }
             }
         }
 
         // YITH WooCommerce Subscription
-        if ( in_array( get_post_meta( $product_id, '_ywsbs_subscription', true ), array( 'yes', '1' ), true ) ) {
-            return true;
+        if ( ! $result && in_array( get_post_meta( $product_id, '_ywsbs_subscription', true ), array( 'yes', '1' ), true ) ) {
+            $result = true;
         }
 
         // Generic enable keys
-        $enable_keys = array( '_subscription_enabled', '_is_subscription', '_subscription_active', '_recurring_enabled', '_auto_renew' );
-        foreach ( $enable_keys as $meta_key ) {
-            if ( in_array( get_post_meta( $product_id, $meta_key, true ), array( 'yes', 'true', '1', 'on' ), true ) ) {
-                return true;
+        if ( ! $result ) {
+            $enable_keys = array( '_subscription_enabled', '_is_subscription', '_subscription_active', '_recurring_enabled', '_auto_renew' );
+            foreach ( $enable_keys as $meta_key ) {
+                if ( in_array( get_post_meta( $product_id, $meta_key, true ), array( 'yes', 'true', '1', 'on' ), true ) ) {
+                    $result = true;
+                    break;
+                }
             }
         }
 
-        return apply_filters( 'wcm_is_subscription_product', false, $product );
+        $result            = (bool) apply_filters( 'wcm_is_subscription_product', $result, $product );
+        $cache[ $product_id ] = $result;
+        return $result;
     }
 
     // ==========================================

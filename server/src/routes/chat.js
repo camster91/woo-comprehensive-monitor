@@ -6,6 +6,9 @@ const router = Router();
 router.post("/chat/deepseek", async (req, res) => {
   const { question, storeData, chatHistory } = req.body;
   if (!question) return res.status(400).json({ error: "question required" });
+  if (typeof question !== "string" || question.length > 4000) {
+    return res.status(400).json({ error: "question must be a string under 4000 characters" });
+  }
 
   const systemPrompt = `You are an expert WooCommerce store analyst. You help diagnose issues, suggest fixes, and explain store metrics. Be concise and actionable. Use markdown formatting.`;
 

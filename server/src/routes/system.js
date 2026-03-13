@@ -12,7 +12,7 @@ router.get("/health", (req, res) => {
   res.json({
     status: "ok",
     timestamp: new Date().toISOString(),
-    version: "3.0.0",
+    version: "3.1.0",
     stores: stores.length,
     total_alerts: total,
     uptime: process.uptime(),
@@ -35,7 +35,7 @@ router.get("/system/config", (req, res) => {
     mailgun_configured: !!(process.env.MAILGUN_API_KEY),
     deepseek_configured: !!(process.env.DEEPSEEK_API_KEY),
     environment: process.env.NODE_ENV || "development",
-    server_version: "3.0.0",
+    server_version: "3.1.0",
     node_version: process.version,
     memory: process.memoryUsage(),
     uptime: process.uptime(),

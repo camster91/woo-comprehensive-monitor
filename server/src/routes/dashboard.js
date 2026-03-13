@@ -40,27 +40,40 @@ router.get("/dashboard", (req, res) => {
   const healthDistribution = { excellent: 0, good: 0, warning: 0, critical: 0, unknown: 0 };
   enhancedStores.forEach(s => healthDistribution[s.health_status]++);
 
-  // Alert trends (7 days)
+  // Alert trends (7 days) — single GROUP BY query instead of 7 separate queries.
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+  const sevenDaysAgoStr = sevenDaysAgo.toISOString().split("T")[0];
+
+  const trendRows = all(
+    `SELECT date(timestamp) as date,
+            COUNT(*) as total,
+            SUM(CASE WHEN severity='critical' THEN 1 ELSE 0 END) as critical,
+            SUM(CASE WHEN severity='high'     THEN 1 ELSE 0 END) as high,
+            SUM(CASE WHEN severity='medium'   THEN 1 ELSE 0 END) as medium
+     FROM alerts
+     WHERE date(timestamp) >= ?
+     GROUP BY date(timestamp)
+     ORDER BY date(timestamp) ASC`,
+    [sevenDaysAgoStr]
+  );
+
+  // Index by date, then fill the full 7-day range (zeros for days with no alerts)
+  const trendMap = {};
+  trendRows.forEach(r => { trendMap[r.date] = r; });
+
   const alertTrends = [];
   for (let i = 6; i >= 0; i--) {
-    const date = new Date();
-    date.setDate(date.getDate() - i);
-    const dateStr = date.toISOString().split("T")[0];
-    const rows = all(
-      `SELECT COUNT(*) as total,
-              SUM(CASE WHEN severity='critical' THEN 1 ELSE 0 END) as critical,
-              SUM(CASE WHEN severity='high' THEN 1 ELSE 0 END) as high,
-              SUM(CASE WHEN severity='medium' THEN 1 ELSE 0 END) as medium
-       FROM alerts WHERE date(timestamp) = ?`,
-      [dateStr]
-    );
-    const row = rows[0] || { total: 0, critical: 0, high: 0, medium: 0 };
-    alertTrends.push({ date: dateStr, total: row.total, critical: row.critical, high: row.high, medium: row.medium });
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().split("T")[0];
+    const r = trendMap[dateStr] || { total: 0, critical: 0, high: 0, medium: 0 };
+    alertTrends.push({ date: dateStr, total: r.total, critical: r.critical, high: r.high, medium: r.medium });
   }
 
   res.json({
     status: "ok",
-    version: "3.0.0",
+    version: "3.1.0",
     overview: {
       totalSites: stores.length,
       totalAlerts,
