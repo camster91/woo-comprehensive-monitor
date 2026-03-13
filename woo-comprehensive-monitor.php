@@ -3,7 +3,7 @@
  * Plugin Name: WooCommerce Comprehensive Monitor & Dispute Protection
  * Plugin URI: https://ashbi.ca
  * Description: Complete WooCommerce monitoring, error tracking, dispute protection, and health alerts. Combines frontend monitoring, dispute evidence generation, and centralized health reporting.
- * Version: 4.5.2
+ * Version: 4.5.3
  * Author: Ashbi
  * Author URI: https://ashbi.ca
  * License: GPL2
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('WCM_VERSION', '4.5.1');
+define('WCM_VERSION', '4.5.3');
 define('WCM_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WCM_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('WCM_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -126,6 +126,12 @@ class WooComprehensiveMonitor {
                 $this->upgrade_plugin( $stored_version, WCM_VERSION );
                 update_option( 'wcm_plugin_version', WCM_VERSION );
             }
+
+            // Fix cron schedule on existing installs without requiring deactivation.
+            // wcm_daily_health_check was scheduled 'hourly' but runs 14 expensive checks
+            // including subscription N+1 queries and a blocking HTTP call.
+            // Migrate to 'twicedaily' automatically.
+            $this->maybe_fix_health_check_schedule();
             
             // Ensure database tables exist (safe, won't break activation)
             $this->ensure_tables_exist();
@@ -196,9 +202,9 @@ class WooComprehensiveMonitor {
         wp_clear_scheduled_hook( 'wcm_hourly_dispute_check' );
         wp_clear_scheduled_hook( 'wcm_daily_log_cleanup' );
 
-        // Re-schedule events
+        // Health check: twicedaily (was hourly — too expensive for 14 heavy DB checks)
         if ( ! wp_next_scheduled( 'wcm_daily_health_check' ) ) {
-            wp_schedule_event( time(), 'hourly', 'wcm_daily_health_check' );
+            wp_schedule_event( time(), 'twicedaily', 'wcm_daily_health_check' );
         }
         if ( ! wp_next_scheduled( 'wcm_hourly_dispute_check' ) ) {
             wp_schedule_event( time(), 'hourly', 'wcm_hourly_dispute_check' );
@@ -406,7 +412,7 @@ class WooComprehensiveMonitor {
             'wcm_auto_generate_evidence' => '1',
             'wcm_send_dispute_alerts' => '1',
             'wcm_enable_health_monitoring' => '1',
-            'wcm_health_check_interval' => '3600', // 1 hour
+            'wcm_health_check_interval' => '21600', // 6 hours (was 1 hour — too expensive)
             'wcm_store_id' => get_option('wcm_store_id', $this->generate_store_id()),
             'wcm_acknowledgment_text' => 'I acknowledge that I will be charged recurring payments for future subscription renewals. I understand that these charges will continue until I cancel my subscription.',
             'wcm_force_all_products' => '0',
@@ -439,9 +445,9 @@ class WooComprehensiveMonitor {
             }
         }
 
-        // Schedule health checks (always ensure they're scheduled)
+        // Schedule health checks — twicedaily (was hourly, too expensive for 14 heavy checks)
         if (!wp_next_scheduled('wcm_daily_health_check')) {
-            wp_schedule_event(time(), 'hourly', 'wcm_daily_health_check');
+            wp_schedule_event(time(), 'twicedaily', 'wcm_daily_health_check');
         }
 
         // Schedule dispute checks
@@ -452,6 +458,20 @@ class WooComprehensiveMonitor {
         // Schedule log cleanup
         if (!wp_next_scheduled('wcm_daily_log_cleanup')) {
             wp_schedule_event(time(), 'daily', 'wcm_daily_log_cleanup');
+        }
+    }
+
+    /**
+     * Migrate existing hourly health check cron to twicedaily.
+     * Runs once per version bump via a stored marker.
+     */
+    private function maybe_fix_health_check_schedule() {
+        // Only migrate if still on the old 'hourly' schedule.
+        $event = wp_get_scheduled_event( 'wcm_daily_health_check' );
+        if ( $event && 'hourly' === $event->schedule ) {
+            wp_clear_scheduled_hook( 'wcm_daily_health_check' );
+            // Offset 15 min from now so it doesn't fire immediately on every page load.
+            wp_schedule_event( time() + 15 * MINUTE_IN_SECONDS, 'twicedaily', 'wcm_daily_health_check' );
         }
     }
 

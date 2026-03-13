@@ -34,17 +34,18 @@ class WCM_Health_Monitor {
             return array();
         }
         
-        // Respect health check interval setting
-        $interval = get_option( 'wcm_health_check_interval', 3600 );
-        $last_run = get_option( 'wcm_health_last_run', 0 );
-        $now = time();
-        
+        // Respect health check interval — default 6 hours (was 1 hour, too expensive).
+        // Each health check runs 14 queries including very heavy ones (subscription N+1,
+        // information_schema scan, blocking HTTP). 6h is a safe default.
+        $interval = (int) get_option( 'wcm_health_check_interval', 6 * HOUR_IN_SECONDS );
+        $last_run = (int) get_option( 'wcm_health_last_run', 0 );
+        $now      = time();
+
         if ( $last_run && ( $now - $last_run ) < $interval ) {
-            // Not enough time has passed since last run
             return array();
         }
-        
-        update_option( 'wcm_health_last_run', $now );
+
+        update_option( 'wcm_health_last_run', $now, false ); // false = don't autoload every page
 
         $checks = array();
         $checks[] = $this->check_woocommerce_status();
@@ -204,14 +205,21 @@ class WCM_Health_Monitor {
         );
 
         global $wpdb;
-        $db_size = $wpdb->get_var( "SELECT ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) FROM information_schema.tables WHERE table_schema = DATABASE()" );
+
+        // information_schema.tables acquires metadata locks and is slow on busy servers.
+        // Cache the result for 6 hours — DB size doesn't change meaningfully in minutes.
+        $db_size = get_transient( 'wcm_db_size_mb' );
+        if ( false === $db_size ) {
+            $db_size = $wpdb->get_var( "SELECT ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) FROM information_schema.tables WHERE table_schema = DATABASE()" );
+            set_transient( 'wcm_db_size_mb', $db_size, 6 * HOUR_IN_SECONDS );
+        }
         $check['details']['database_size_mb'] = $db_size;
 
         $sessions = $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}woocommerce_sessions" );
         $check['details']['active_sessions'] = $sessions;
 
         if ( $sessions > 10000 ) {
-            $check['status']                    = 'warning';
+            $check['status']                     = 'warning';
             $check['details']['session_message'] = 'High number of sessions. Consider cleanup.';
         }
 
@@ -269,17 +277,37 @@ class WCM_Health_Monitor {
 
         $monitoring_server = get_option( 'wcm_monitoring_server', '' );
         if ( ! empty( $monitoring_server ) ) {
-            $response = wp_remote_get( str_replace( '/api/track-woo-error', '/api/health', $monitoring_server ), array( 'timeout' => 10 ) );
-            if ( is_wp_error( $response ) ) {
-                $check['status']                  = 'warning';
-                $check['details']['server_message'] = 'Cannot reach monitoring server: ' . $response->get_error_message();
+            // Cache connectivity status for 1 hour — avoids a blocking HTTP call on
+            // every health check run. A 10s blocking wp_remote_get ties up the entire
+            // PHP-FPM worker and starves other incoming requests.
+            $cache_key = 'wcm_api_connectivity';
+            $cached    = get_transient( $cache_key );
+
+            if ( false !== $cached ) {
+                $check['details']['monitoring_server'] = $cached;
+                if ( 'Unreachable' === $cached ) {
+                    $check['status']                    = 'warning';
+                    $check['details']['server_message'] = 'Monitoring server unreachable (cached result).';
+                }
             } else {
-                $check['details']['monitoring_server'] = 'Connected';
+                $server_url = str_replace( '/api/track-woo-error', '/api/health', $monitoring_server );
+                $response   = wp_remote_get( $server_url, array(
+                    'timeout'   => 5,    // 5s max — was 10s blocking
+                    'sslverify' => false,
+                ) );
+
+                if ( is_wp_error( $response ) ) {
+                    $check['status']                    = 'warning';
+                    $check['details']['server_message'] = 'Cannot reach monitoring server: ' . $response->get_error_message();
+                    set_transient( $cache_key, 'Unreachable', 30 * MINUTE_IN_SECONDS );
+                } else {
+                    $check['details']['monitoring_server'] = 'Connected';
+                    set_transient( $cache_key, 'Connected', HOUR_IN_SECONDS );
+                }
             }
         }
 
-        $rest_url = rest_url( 'wc/v3/' );
-        $check['details']['rest_api_url'] = $rest_url;
+        $check['details']['rest_api_url'] = rest_url( 'wc/v3/' );
 
         return $check;
     }
@@ -327,61 +355,60 @@ class WCM_Health_Monitor {
             return $check;
         }
 
-        $now = current_time( 'mysql' );
-        $one_hour_ago = gmdate( 'Y-m-d H:i:s', strtotime( '-1 hour' ) );
-        $twentyfour_hours_ago = gmdate( 'Y-m-d H:i:s', strtotime( '-24 hours' ) );
-        $fortyeight_hours_ago = gmdate( 'Y-m-d H:i:s', strtotime( '-48 hours' ) );
+        // Cache for 2 hours — 3 wc_get_orders() calls with date+status filters each do
+        // complex SQL JOINs. No need to re-run every health check cycle.
+        $cached = get_transient( 'wcm_order_flow_check' );
+        if ( false !== $cached ) {
+            return $cached;
+        }
 
-        // Orders stuck in "pending" >1 hour
+        $one_hour_ago     = gmdate( 'Y-m-d H:i:s', strtotime( '-1 hour' ) );
+        $twentyfour_ago   = gmdate( 'Y-m-d H:i:s', strtotime( '-24 hours' ) );
+        $fortyeight_ago   = gmdate( 'Y-m-d H:i:s', strtotime( '-48 hours' ) );
+
         $pending_orders = wc_get_orders( array(
             'status'       => 'pending',
             'date_created' => '<' . $one_hour_ago,
             'limit'        => 20,
             'return'       => 'ids',
         ) );
-        
         $check['details']['pending_stuck'] = count( $pending_orders );
         if ( ! empty( $pending_orders ) ) {
             $check['details']['pending_order_ids'] = implode( ', ', $pending_orders );
         }
 
-        // Orders stuck in "processing" >24 hours
         $processing_orders = wc_get_orders( array(
             'status'       => 'processing',
-            'date_created' => '<' . $twentyfour_hours_ago,
+            'date_created' => '<' . $twentyfour_ago,
             'limit'        => 20,
             'return'       => 'ids',
         ) );
-        
         $check['details']['processing_stuck'] = count( $processing_orders );
         if ( ! empty( $processing_orders ) ) {
             $check['details']['processing_order_ids'] = implode( ', ', $processing_orders );
         }
 
-        // Orders stuck in "on-hold" >48 hours
         $onhold_orders = wc_get_orders( array(
             'status'       => 'on-hold',
-            'date_created' => '<' . $fortyeight_hours_ago,
+            'date_created' => '<' . $fortyeight_ago,
             'limit'        => 20,
             'return'       => 'ids',
         ) );
-        
         $check['details']['onhold_stuck'] = count( $onhold_orders );
         if ( ! empty( $onhold_orders ) ) {
             $check['details']['onhold_order_ids'] = implode( ', ', $onhold_orders );
         }
 
-        // Determine status based on stuck orders
         $total_stuck = $check['details']['pending_stuck'] + $check['details']['processing_stuck'] + $check['details']['onhold_stuck'];
-        
         if ( $total_stuck > 5 ) {
-            $check['status'] = 'critical';
+            $check['status']             = 'critical';
             $check['details']['message'] = $total_stuck . ' orders stuck in workflow';
         } elseif ( $total_stuck > 0 ) {
-            $check['status'] = 'warning';
+            $check['status']             = 'warning';
             $check['details']['message'] = $total_stuck . ' orders stuck in workflow';
         }
 
+        set_transient( 'wcm_order_flow_check', $check, 2 * HOUR_IN_SECONDS );
         return $check;
     }
 
@@ -395,72 +422,92 @@ class WCM_Health_Monitor {
             'details' => array(),
         );
 
-        // Check WooCommerce Subscriptions if available
-        if ( function_exists( 'wcs_get_subscriptions' ) ) {
-            $now = current_time( 'timestamp' );
-            $seven_days_from_now = $now + ( 7 * DAY_IN_SECONDS );
-            
-            $subscription_args = array(
-                'subscriptions_per_page' => -1,
-                'subscription_status'    => array( 'active', 'pending-cancel' ),
-            );
-            
-            $subscriptions = wcs_get_subscriptions( $subscription_args );
-            
-            $overdue_renewals = 0;
-            $failed_renewals = 0;
-            $expiring_soon = 0;
-            $subscription_details = array();
-            
-            foreach ( $subscriptions as $subscription ) {
-                $next_payment = $subscription->get_time( 'next_payment' );
-                $end_date = $subscription->get_time( 'end' );
-                
-                // Overdue renewals (next payment was in the past)
-                if ( $next_payment && $next_payment < $now ) {
-                    $overdue_renewals++;
-                    $subscription_details[] = 'Subscription #' . $subscription->get_id() . ' overdue since ' . date_i18n( 'Y-m-d', $next_payment );
-                }
-                
-                // Failed renewals (check recent failed orders)
-                $related_orders = $subscription->get_related_orders();
-                $recent_failed = 0;
-                foreach ( $related_orders as $order_id ) {
-                    $order = wc_get_order( $order_id );
-                    if ( $order && 'failed' === $order->get_status() && strtotime( $order->get_date_created() ) > $now - ( 30 * DAY_IN_SECONDS ) ) {
-                        $recent_failed++;
-                    }
-                }
-                if ( $recent_failed >= 2 ) {
-                    $failed_renewals++;
-                }
-                
-                // Expiring soon (within 7 days)
-                if ( $end_date && $end_date > $now && $end_date < $seven_days_from_now ) {
-                    $expiring_soon++;
-                }
-            }
-            
-            $check['details']['total_subscriptions'] = count( $subscriptions );
-            $check['details']['overdue_renewals'] = $overdue_renewals;
-            $check['details']['failed_renewals'] = $failed_renewals;
-            $check['details']['expiring_soon'] = $expiring_soon;
-            
-            if ( $overdue_renewals > 0 ) {
-                $check['status'] = 'critical';
-                $check['details']['message'] = $overdue_renewals . ' subscription renewals overdue';
-            } elseif ( $failed_renewals > 0 ) {
-                $check['status'] = 'warning';
-                $check['details']['message'] = $failed_renewals . ' subscriptions with multiple failed renewals';
-            }
-            
-            if ( ! empty( $subscription_details ) ) {
-                $check['details']['subscription_details'] = $subscription_details;
-            }
-        } else {
+        if ( ! function_exists( 'wcs_get_subscriptions' ) ) {
             $check['details']['message'] = 'WooCommerce Subscriptions not active';
+            return $check;
         }
 
+        // Cache for 4 hours. This check was the single biggest server killer:
+        // the old code did wcs_get_subscriptions(per_page=-1) loading ALL subscriptions
+        // with no limit, then for each subscription called get_related_orders() + wc_get_order()
+        // per related order — an N×M query loop. 500 subs × 5 orders = 2,500 DB queries/hour.
+        $cached = get_transient( 'wcm_sub_timing_check' );
+        if ( false !== $cached ) {
+            return $cached;
+        }
+
+        $now             = current_time( 'timestamp' );
+        $seven_days_from = $now + ( 7 * DAY_IN_SECONDS );
+
+        // Cap at 500 subscriptions to prevent full-table loads on large sites.
+        $subscriptions = wcs_get_subscriptions( array(
+            'subscriptions_per_page' => 500,
+            'subscription_status'    => array( 'active', 'pending-cancel' ),
+        ) );
+
+        $overdue_renewals = 0;
+        $expiring_soon    = 0;
+
+        foreach ( $subscriptions as $subscription ) {
+            $next_payment = $subscription->get_time( 'next_payment' );
+            $end_date     = $subscription->get_time( 'end' );
+
+            if ( $next_payment && $next_payment < $now ) {
+                $overdue_renewals++;
+            }
+            if ( $end_date && $end_date > $now && $end_date < $seven_days_from ) {
+                $expiring_soon++;
+            }
+            // NOTE: per-subscription get_related_orders() + wc_get_order() loop removed.
+            // It generated N×M queries. Failed renewals are counted with a single query below.
+        }
+
+        // Single aggregate query for recent failed renewal orders — replaces N+1 loop.
+        global $wpdb;
+        $thirty_days_ago = gmdate( 'Y-m-d H:i:s', $now - 30 * DAY_IN_SECONDS );
+
+        if ( class_exists( 'Automattic\WooCommerce\Utilities\OrderUtil' ) &&
+             \Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled() ) {
+            // HPOS: orders are in wc_orders table
+            $failed_renewals = (int) $wpdb->get_var( $wpdb->prepare(
+                "SELECT COUNT(DISTINCT o.id)
+                 FROM {$wpdb->prefix}wc_orders o
+                 INNER JOIN {$wpdb->prefix}wc_orders_meta om ON o.id = om.order_id
+                 WHERE o.status = 'wc-failed'
+                   AND o.date_created_gmt >= %s
+                   AND om.meta_key = '_subscription_renewal'
+                   AND om.meta_value != ''",
+                $thirty_days_ago
+            ) );
+        } else {
+            // Legacy post-based orders
+            $failed_renewals = (int) $wpdb->get_var( $wpdb->prepare(
+                "SELECT COUNT(DISTINCT p.ID)
+                 FROM {$wpdb->posts} p
+                 INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
+                 WHERE p.post_type    = 'shop_order'
+                   AND p.post_status  = 'wc-failed'
+                   AND p.post_date_gmt >= %s
+                   AND pm.meta_key   = '_subscription_renewal'
+                   AND pm.meta_value != ''",
+                $thirty_days_ago
+            ) );
+        }
+
+        $check['details']['total_subscriptions'] = count( $subscriptions );
+        $check['details']['overdue_renewals']    = $overdue_renewals;
+        $check['details']['failed_renewals']     = $failed_renewals;
+        $check['details']['expiring_soon']       = $expiring_soon;
+
+        if ( $overdue_renewals > 0 ) {
+            $check['status']             = 'critical';
+            $check['details']['message'] = $overdue_renewals . ' subscription renewals overdue';
+        } elseif ( $failed_renewals > 0 ) {
+            $check['status']             = 'warning';
+            $check['details']['message'] = $failed_renewals . ' failed renewal orders in last 30 days';
+        }
+
+        set_transient( 'wcm_sub_timing_check', $check, 4 * HOUR_IN_SECONDS );
         return $check;
     }
 
