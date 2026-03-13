@@ -115,7 +115,7 @@ class WCM_Auto_Updater {
             $update->plugin = $this->plugin_basename;
             $update->new_version = $latest_version;
             $update->url = $plugin_data['PluginURI'];
-            $update->package = $latest_release['zipball_url'];
+            $update->package = $this->get_release_asset_url( $latest_release );
             $update->tested = $latest_release['target_commitish'] ?? 'master';
             $update->requires_php = '7.4';
             $update->requires = '5.6';
@@ -137,6 +137,33 @@ class WCM_Auto_Updater {
         }
 
         return $transient;
+    }
+
+    /**
+     * Get the plugin ZIP download URL from a GitHub release.
+     *
+     * Prefers an attached asset named `woo-comprehensive-monitor-v{version}.zip`
+     * so WordPress installs the correctly-named plugin folder.
+     * Falls back to `zipball_url` (auto-generated source archive) if no asset found.
+     */
+    private function get_release_asset_url( array $release ): string {
+        $version = ltrim( $release['tag_name'] ?? '', 'v' );
+        $expected_name = "woo-comprehensive-monitor-v{$version}.zip";
+
+        if ( ! empty( $release['assets'] ) && is_array( $release['assets'] ) ) {
+            foreach ( $release['assets'] as $asset ) {
+                if (
+                    isset( $asset['name'], $asset['browser_download_url'] ) &&
+                    $asset['name'] === $expected_name &&
+                    ! empty( $asset['browser_download_url'] )
+                ) {
+                    return $asset['browser_download_url'];
+                }
+            }
+        }
+
+        // Fallback to GitHub's auto-generated source ZIP
+        return $release['zipball_url'] ?? '';
     }
 
     /**
@@ -302,7 +329,7 @@ class WCM_Auto_Updater {
         $info->tested = '6.5';
         $info->requires_php = '7.4';
         $info->last_updated = $latest_release['published_at'];
-        $info->download_link = $latest_release['zipball_url'];
+        $info->download_link = $this->get_release_asset_url( $latest_release );
         $info->sections = array(
             'description' => $plugin_data['Description'],
             'installation' => '<p>Automatic updates are enabled. The plugin will update itself when new versions are released on GitHub.</p>',
