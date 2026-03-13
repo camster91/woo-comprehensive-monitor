@@ -155,7 +155,7 @@ class WCM_Auto_Updater {
                 'Accept' => 'application/vnd.github.v3+json',
                 'User-Agent' => 'WooCommerce-Comprehensive-Monitor/' . WCM_VERSION,
             ),
-            'timeout' => 15,
+            'timeout' => 5, // 15s was too long for an admin page-blocking GitHub call
         ) );
 
         if ( is_wp_error( $response ) || wp_remote_retrieve_response_code( $response ) !== 200 ) {
