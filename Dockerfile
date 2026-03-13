@@ -2,7 +2,8 @@
 FROM node:20-alpine AS dashboard-build
 WORKDIR /build
 COPY server/dashboard/package*.json ./
-RUN npm ci
+# --include=dev ensures vite/@vitejs/plugin-react are installed even when NODE_ENV=production
+RUN npm ci --include=dev
 COPY server/dashboard/ .
 RUN npm run build
 
