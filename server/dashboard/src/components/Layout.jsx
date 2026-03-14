@@ -1,9 +1,9 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useEffect, useState, useCallback } from "react";
-import { api } from "../api/client";
+import { api, apiPost } from "../api/client";
 import {
   LayoutDashboard, Store, Bell, MessageSquare, Settings,
-  RefreshCw, Wifi, WifiOff, Menu, X,
+  RefreshCw, WifiOff, Menu, X, LogOut,
 } from "lucide-react";
 
 const tabs = [
@@ -14,13 +14,18 @@ const tabs = [
   { to: "/dashboard/system",  label: "System",   icon: Settings },
 ];
 
-export default function Layout() {
+export default function Layout({ onLogout }) {
   const [overview, setOverview] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [secondsAgo, setSecondsAgo] = useState(0);
   const [online, setOnline] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
   const navigate = useNavigate();
+
+  async function handleLogout() {
+    try { await apiPost("/api/auth/logout", {}); } catch (_) { /* ignore */ }
+    onLogout?.();
+  }
 
   const refresh = useCallback(() => {
     api("/api/dashboard")
@@ -86,6 +91,13 @@ export default function Layout() {
                 className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/70 hover:text-white"
                 title="Refresh now">
                 <RefreshCw size={14} />
+              </button>
+
+              {/* Logout button */}
+              <button onClick={handleLogout}
+                className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/70 hover:text-white hidden sm:flex items-center"
+                title="Sign out">
+                <LogOut size={14} />
               </button>
 
               {/* Mobile hamburger */}

@@ -4,9 +4,28 @@ const { upsertStore, findStoreByUrl, getStoreStats, updateStoreStats, touchStore
 
 const router = Router();
 
+const VALID_TYPES = new Set([
+  "dispute_created",
+  "health_check_critical",
+  "plugin_activated",
+  "plugin_deactivated",
+  "subscription_cancelled",
+  "subscription_price_adjustment",
+  "admin_notice",
+  "heartbeat",
+  "javascript_error",
+  "checkout_error",
+  "ajax_add_to_cart_error",
+]);
+
 router.post("/track-woo-error", async (req, res) => {
   try {
     const { type, error_message, site, url, time } = req.body;
+
+    // Reject unknown/missing event types to prevent junk alerts
+    if (!type || !VALID_TYPES.has(type)) {
+      return res.status(400).json({ success: false, error: `Unknown event type: "${type}"` });
+    }
 
     // Resolve store from URL — uses cached store list (no DB scan per request)
     const siteObj = findStoreByUrl(site);

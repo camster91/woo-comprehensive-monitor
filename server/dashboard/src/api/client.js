@@ -12,7 +12,9 @@ export async function apiFetch(url, options = {}) {
   const res = await fetch(`${BASE}${url}`, { ...options, headers });
   if (res.status === 401) {
     localStorage.removeItem("authToken");
-    window.location.href = "/dashboard";
+    // Dispatch an event so App.jsx can switch to the login view without a
+    // hard page reload (avoids infinite redirect loop).
+    window.dispatchEvent(new Event("woo:401"));
     throw new Error("Authentication required");
   }
   return res;

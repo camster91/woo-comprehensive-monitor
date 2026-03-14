@@ -7,7 +7,7 @@ import {
   Cpu, Clock, Shield, Mail, Bot,
 } from "lucide-react";
 
-export default function System() {
+export default function System({ onLogout }) {
   const [config, setConfig]   = useState(null);
   const [results, setResults] = useState({});
   const [running, setRunning] = useState(null);

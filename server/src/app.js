@@ -88,10 +88,12 @@ function createApp() {
   app.use("/api", generalLimiter);
 
   // -------------------------------------------------------------------------
-  // Auth
+  // Auth — scoped to /api only so the React SPA (and login page) can load
+  // for unauthenticated users.  Non-/api paths (HTML, JS, CSS assets) are
+  // always served without auth checks; the SPA handles the login flow.
   // -------------------------------------------------------------------------
-  app.use(apiKeyMiddleware);
-  app.use(authMiddleware);
+  app.use("/api", apiKeyMiddleware);
+  app.use("/api", authMiddleware);
 
   // -------------------------------------------------------------------------
   // API routes
