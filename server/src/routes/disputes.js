@@ -31,6 +31,100 @@ router.delete("/disputes/:id", (req, res) => {
   res.json({ success: true });
 });
 
+// Get evidence preview for a dispute (proxies to the store's REST API)
+router.get("/disputes/:id/evidence", async (req, res) => {
+  const dispute = disputeService.getDispute(parseInt(req.params.id));
+  if (!dispute) return res.status(404).json({ error: "Dispute not found" });
+  if (!dispute.stripe_dispute_id) return res.status(400).json({ error: "No Stripe dispute ID" });
+
+  // Find the store to proxy the request
+  const stores = getAllStores();
+  const store = stores.find(s => s.id === dispute.store_id) ||
+    stores.find(s => dispute.store_url && s.url && dispute.store_url.includes(s.url));
+
+  if (!store || !store.consumer_key || !store.consumer_secret) {
+    return res.json({ dispute_id: dispute.stripe_dispute_id, evidence: null, error: "Store credentials not configured" });
+  }
+
+  try {
+    const authHeader = "Basic " + Buffer.from(`${store.consumer_key}:${store.consumer_secret}`).toString("base64");
+    const { data } = await axios.get(
+      `${store.url}/wp-json/wcm/v1/disputes/${dispute.stripe_dispute_id}/evidence`,
+      { headers: { Authorization: authHeader }, timeout: 15000 }
+    );
+    res.json(data);
+  } catch (err) {
+    res.json({ dispute_id: dispute.stripe_dispute_id, evidence: null, error: err.message });
+  }
+});
+
+// Submit evidence to Stripe via the store's REST API
+router.post("/disputes/:id/submit", async (req, res) => {
+  const dispute = disputeService.getDispute(parseInt(req.params.id));
+  if (!dispute) return res.status(404).json({ error: "Dispute not found" });
+
+  const stores = getAllStores();
+  const store = stores.find(s => s.id === dispute.store_id) ||
+    stores.find(s => dispute.store_url && s.url && dispute.store_url.includes(s.url));
+
+  if (!store || !store.consumer_key || !store.consumer_secret) {
+    return res.status(400).json({ error: "Store credentials not configured" });
+  }
+
+  try {
+    const authHeader = "Basic " + Buffer.from(`${store.consumer_key}:${store.consumer_secret}`).toString("base64");
+    const { data } = await axios.post(
+      `${store.url}/wp-json/wcm/v1/disputes/${dispute.stripe_dispute_id}/submit`,
+      {},
+      { headers: { Authorization: authHeader }, timeout: 30000 }
+    );
+
+    // Update dispute status in our DB
+    disputeService.upsertDispute({
+      stripeDisputeId: dispute.stripe_dispute_id,
+      evidenceGenerated: true,
+      metadata: { ...dispute.metadata, evidence_submitted: true, submitted_at: new Date().toISOString() },
+    });
+
+    res.json({ success: true, result: data });
+  } catch (err) {
+    res.status(502).json({ error: "Submission failed: " + err.message });
+  }
+});
+
+// Stage evidence on a dispute (for disputes not yet auto-staged)
+router.post("/disputes/:id/stage", async (req, res) => {
+  const dispute = disputeService.getDispute(parseInt(req.params.id));
+  if (!dispute) return res.status(404).json({ error: "Dispute not found" });
+
+  const stores = getAllStores();
+  const store = stores.find(s => s.id === dispute.store_id) ||
+    stores.find(s => dispute.store_url && s.url && dispute.store_url.includes(s.url));
+
+  if (!store || !store.consumer_key || !store.consumer_secret) {
+    return res.status(400).json({ error: "Store credentials not configured" });
+  }
+
+  try {
+    const authHeader = "Basic " + Buffer.from(`${store.consumer_key}:${store.consumer_secret}`).toString("base64");
+    const { data } = await axios.post(
+      `${store.url}/wp-json/wcm/v1/disputes/${dispute.stripe_dispute_id}/stage`,
+      {},
+      { headers: { Authorization: authHeader }, timeout: 30000 }
+    );
+
+    disputeService.upsertDispute({
+      stripeDisputeId: dispute.stripe_dispute_id,
+      evidenceGenerated: true,
+      metadata: { ...dispute.metadata, evidence_staged: true, staged_at: new Date().toISOString() },
+    });
+
+    res.json({ success: true, result: data });
+  } catch (err) {
+    res.status(502).json({ error: "Staging failed: " + err.message });
+  }
+});
+
 // Trigger historical dispute sync on all connected stores
 router.post("/disputes/sync", async (req, res) => {
   const stores = getAllStores();

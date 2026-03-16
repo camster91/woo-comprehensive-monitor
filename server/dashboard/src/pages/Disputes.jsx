@@ -5,6 +5,7 @@ import { timeAgo } from "../utils/time";
 import {
   Shield, AlertTriangle, CheckCircle, XCircle, Clock,
   ChevronDown, ChevronRight, Trash2, Filter, DollarSign, RefreshCw,
+  Send, Eye, FileText, Loader,
 } from "lucide-react";
 
 const REASONS = {
@@ -147,41 +148,7 @@ export default function Disputes() {
                 <span className="text-slate-400">{isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span>
               </div>
 
-              {isOpen && (
-                <div className="px-6 pb-4 bg-slate-50/50 space-y-3 text-sm">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <Detail label="Order #" value={d.order_id} />
-                    <Detail label="Dispute ID" value={d.stripe_dispute_id} mono />
-                    <Detail label="Email" value={d.customer_email} />
-                    <Detail label="Created" value={d.created_at ? timeAgo(d.created_at) : "—"} />
-                  </div>
-                  {d.products?.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold text-slate-500 mb-1">Products</p>
-                      <div className="space-y-0.5">
-                        {d.products.map((p, i) => (
-                          <p key={i} className="text-xs text-slate-600">{p.qty}x {p.name} — ${parseFloat(p.total || 0).toFixed(2)}</p>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {d.evidence_summary && (
-                    <div>
-                      <p className="text-xs font-semibold text-slate-500 mb-1">Evidence Summary</p>
-                      <p className="text-xs text-slate-600 whitespace-pre-wrap bg-white rounded-lg p-3 border border-gray-100">{d.evidence_summary}</p>
-                    </div>
-                  )}
-                  {d.evidence_generated && (
-                    <div className="flex items-center gap-1 text-xs text-green-600">
-                      <CheckCircle size={12} /> Evidence auto-generated
-                    </div>
-                  )}
-                  <button onClick={(e) => { e.stopPropagation(); apiDelete(`/api/disputes/${d.id}`).then(() => { toast("Dispute removed"); fetchDisputes(); api("/api/disputes/stats").then(setStats); }); }}
-                    className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 mt-1">
-                    <Trash2 size={12} /> Remove
-                  </button>
-                </div>
-              )}
+              {isOpen && <DisputeDetail d={d} toast={toast} fetchDisputes={fetchDisputes} setStats={setStats} />}
             </div>
           );
         })}
@@ -212,6 +179,148 @@ function StatCard({ label, value, icon, color }) {
     <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
       <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-1">{icon}{label}</div>
       <p className={`text-xl font-bold ${colors[color] || "text-slate-700"}`}>{value}</p>
+    </div>
+  );
+}
+
+function DisputeDetail({ d, toast, fetchDisputes, setStats }) {
+  const [evidence, setEvidence] = useState(null);
+  const [loadingEvidence, setLoadingEvidence] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [staging, setStaging] = useState(false);
+
+  const loadEvidence = async () => {
+    setLoadingEvidence(true);
+    try {
+      const res = await api(`/api/disputes/${d.id}/evidence`);
+      setEvidence(res.evidence || res);
+    } catch (err) {
+      toast("Failed to load evidence: " + err.message, "error");
+    }
+    setLoadingEvidence(false);
+  };
+
+  const stageEvidence = async () => {
+    setStaging(true);
+    try {
+      await apiPost(`/api/disputes/${d.id}/stage`, {});
+      toast("Evidence staged on Stripe");
+      fetchDisputes();
+    } catch (err) {
+      toast("Staging failed: " + err.message, "error");
+    }
+    setStaging(false);
+  };
+
+  const submitEvidence = async () => {
+    if (!confirm("Submit evidence to Stripe? This is FINAL and cannot be amended.")) return;
+    setSubmitting(true);
+    try {
+      await apiPost(`/api/disputes/${d.id}/submit`, {});
+      toast("Evidence submitted to Stripe!");
+      fetchDisputes();
+      api("/api/disputes/stats").then(setStats);
+    } catch (err) {
+      toast("Submission failed: " + err.message, "error");
+    }
+    setSubmitting(false);
+  };
+
+  const isSubmitted = d.metadata?.evidence_submitted;
+  const isStaged = d.metadata?.evidence_staged || d.evidence_generated;
+
+  return (
+    <div className="px-6 pb-4 bg-slate-50/50 space-y-3 text-sm">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Detail label="Order #" value={d.order_id} />
+        <Detail label="Dispute ID" value={d.stripe_dispute_id} mono />
+        <Detail label="Email" value={d.customer_email} />
+        <Detail label="Created" value={d.created_at ? timeAgo(d.created_at) : "—"} />
+      </div>
+
+      {d.products?.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-slate-500 mb-1">Products</p>
+          <div className="space-y-0.5">
+            {d.products.map((p, i) => (
+              <p key={i} className="text-xs text-slate-600">{p.qty}x {p.name} — ${parseFloat(p.total || 0).toFixed(2)}</p>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {d.evidence_summary && (
+        <div>
+          <p className="text-xs font-semibold text-slate-500 mb-1">Evidence Summary</p>
+          <p className="text-xs text-slate-600 whitespace-pre-wrap bg-white rounded-lg p-3 border border-gray-100">{d.evidence_summary}</p>
+        </div>
+      )}
+
+      {/* Evidence status badge */}
+      <div className="flex items-center gap-2">
+        {isSubmitted ? (
+          <span className="flex items-center gap-1 text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded-lg">
+            <CheckCircle size={12} /> Evidence Submitted
+          </span>
+        ) : isStaged ? (
+          <span className="flex items-center gap-1 text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">
+            <FileText size={12} /> Evidence Staged
+          </span>
+        ) : (
+          <span className="flex items-center gap-1 text-xs font-medium text-gray-500 bg-gray-50 px-2 py-1 rounded-lg">
+            <AlertTriangle size={12} /> No Evidence
+          </span>
+        )}
+      </div>
+
+      {/* Evidence actions */}
+      <div className="flex flex-wrap gap-2">
+        <button onClick={loadEvidence} disabled={loadingEvidence}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-lg text-xs font-medium hover:bg-slate-50 disabled:opacity-50">
+          {loadingEvidence ? <Loader size={12} className="animate-spin" /> : <Eye size={12} />}
+          Preview Evidence
+        </button>
+
+        {!isStaged && !isSubmitted && d.status !== "won" && d.status !== "lost" && (
+          <button onClick={stageEvidence} disabled={staging}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500 text-white rounded-lg text-xs font-medium hover:bg-blue-600 disabled:opacity-50">
+            {staging ? <Loader size={12} className="animate-spin" /> : <FileText size={12} />}
+            Stage Evidence
+          </button>
+        )}
+
+        {!isSubmitted && d.status !== "won" && d.status !== "lost" && (
+          <button onClick={submitEvidence} disabled={submitting}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50">
+            {submitting ? <Loader size={12} className="animate-spin" /> : <Send size={12} />}
+            Submit to Stripe
+          </button>
+        )}
+
+        <button onClick={(e) => { e.stopPropagation(); apiDelete(`/api/disputes/${d.id}`).then(() => { toast("Dispute removed"); fetchDisputes(); api("/api/disputes/stats").then(setStats); }); }}
+          className="flex items-center gap-1 px-3 py-1.5 text-xs text-red-500 hover:text-red-700 border border-red-200 rounded-lg hover:bg-red-50">
+          <Trash2 size={12} /> Remove
+        </button>
+      </div>
+
+      {/* Evidence preview */}
+      {evidence && (
+        <div className="mt-2 bg-white rounded-xl border border-gray-200 p-4">
+          <p className="text-xs font-semibold text-slate-500 mb-3 flex items-center gap-1"><FileText size={13} /> Evidence Preview</p>
+          <div className="space-y-2">
+            {typeof evidence === "object" && !evidence.error ? (
+              Object.entries(evidence).filter(([k]) => k !== "error").map(([key, value]) => (
+                <div key={key} className="border-b border-gray-50 pb-2 last:border-0">
+                  <p className="text-xs text-slate-400 font-mono">{key}</p>
+                  <p className="text-xs text-slate-700 whitespace-pre-wrap mt-0.5">{typeof value === "string" ? value : JSON.stringify(value)}</p>
+                </div>
+              ))
+            ) : (
+              <p className="text-xs text-slate-500">{evidence.error || "No evidence available. Click 'Stage Evidence' to auto-generate."}</p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

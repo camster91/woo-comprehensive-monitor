@@ -60,6 +60,30 @@ class WCM_Dispute_Manager {
                 return current_user_can( 'manage_woocommerce' );
             },
         ) );
+
+        register_rest_route( 'wcm/v1', '/disputes/(?P<dispute_id>[a-zA-Z0-9_]+)/evidence', array(
+            'methods'             => 'GET',
+            'callback'            => array( $this, 'handle_get_evidence_preview' ),
+            'permission_callback' => function () {
+                return current_user_can( 'manage_woocommerce' );
+            },
+        ) );
+
+        register_rest_route( 'wcm/v1', '/disputes/(?P<dispute_id>[a-zA-Z0-9_]+)/submit', array(
+            'methods'             => 'POST',
+            'callback'            => array( $this, 'handle_submit_evidence' ),
+            'permission_callback' => function () {
+                return current_user_can( 'manage_woocommerce' );
+            },
+        ) );
+
+        register_rest_route( 'wcm/v1', '/disputes/(?P<dispute_id>[a-zA-Z0-9_]+)/stage', array(
+            'methods'             => 'POST',
+            'callback'            => array( $this, 'handle_stage_evidence' ),
+            'permission_callback' => function () {
+                return current_user_can( 'manage_woocommerce' );
+            },
+        ) );
     }
 
     /**
@@ -193,6 +217,19 @@ class WCM_Dispute_Manager {
             );
 
             $this->send_dispute_alert( $order, $dispute, $evidence );
+        }
+
+        // Auto-stage evidence on Stripe (submit=false for human review)
+        if ( class_exists( 'WCM_Evidence_Submitter' ) ) {
+            $submitter = new WCM_Evidence_Submitter();
+            $stage_result = $submitter->auto_stage_evidence( $dispute->id, $order, $dispute->reason );
+            if ( is_wp_error( $stage_result ) ) {
+                error_log( 'WCM: Evidence staging failed: ' . $stage_result->get_error_message() );
+            } else {
+                $order->add_order_note(
+                    sprintf( __( 'Evidence auto-staged on Stripe dispute %s. Review and submit from the monitoring dashboard.', 'woo-comprehensive-monitor' ), $dispute->id )
+                );
+            }
         }
 
         $order->add_order_note(
@@ -490,6 +527,124 @@ class WCM_Dispute_Manager {
             }
             $this->handle_new_dispute( $dispute );
         }
+    }
+
+    /**
+     * REST: Get evidence preview for a dispute
+     */
+    public function handle_get_evidence_preview( $request ) {
+        $dispute_id = $request->get_param( 'dispute_id' );
+
+        global $wpdb;
+        $record = $wpdb->get_row( $wpdb->prepare(
+            "SELECT * FROM {$wpdb->prefix}wcm_dispute_evidence WHERE stripe_dispute_id = %s",
+            $dispute_id
+        ) );
+
+        if ( ! $record ) {
+            return new WP_REST_Response( array( 'error' => 'Dispute not found locally' ), 404 );
+        }
+
+        $order = wc_get_order( $record->order_id );
+        if ( ! $order ) {
+            return new WP_REST_Response( array( 'error' => 'Order not found' ), 404 );
+        }
+
+        // Get the dispute reason from Stripe
+        $reason = 'general';
+        if ( ! empty( $this->stripe_api_key ) ) {
+            $resp = wp_remote_get( 'https://api.stripe.com/v1/disputes/' . $dispute_id, array(
+                'headers' => array( 'Authorization' => 'Bearer ' . $this->stripe_api_key ),
+                'timeout' => 5,
+            ) );
+            if ( ! is_wp_error( $resp ) && 200 === wp_remote_retrieve_response_code( $resp ) ) {
+                $d = json_decode( wp_remote_retrieve_body( $resp ) );
+                $reason = $d->reason ?? 'general';
+            }
+        }
+
+        $submitter = new WCM_Evidence_Submitter();
+        $evidence  = $submitter->get_evidence_preview( $order, $reason );
+
+        return new WP_REST_Response( array(
+            'dispute_id' => $dispute_id,
+            'reason'     => $reason,
+            'order_id'   => $record->order_id,
+            'evidence'   => $evidence,
+        ), 200 );
+    }
+
+    /**
+     * REST: Submit staged evidence to Stripe (final submission)
+     */
+    public function handle_submit_evidence( $request ) {
+        $dispute_id = $request->get_param( 'dispute_id' );
+        $submitter  = new WCM_Evidence_Submitter();
+        $result     = $submitter->submit_evidence( $dispute_id );
+
+        if ( is_wp_error( $result ) ) {
+            return new WP_REST_Response( array( 'error' => $result->get_error_message() ), 400 );
+        }
+
+        // Update local record
+        global $wpdb;
+        $wpdb->update(
+            $wpdb->prefix . 'wcm_dispute_evidence',
+            array( 'status' => 'submitted' ),
+            array( 'stripe_dispute_id' => $dispute_id )
+        );
+
+        return new WP_REST_Response( array( 'success' => true, 'submitted' => true ), 200 );
+    }
+
+    /**
+     * REST: Stage evidence on a dispute (for disputes that weren't auto-staged)
+     */
+    public function handle_stage_evidence( $request ) {
+        $dispute_id = $request->get_param( 'dispute_id' );
+
+        global $wpdb;
+        $record = $wpdb->get_row( $wpdb->prepare(
+            "SELECT * FROM {$wpdb->prefix}wcm_dispute_evidence WHERE stripe_dispute_id = %s",
+            $dispute_id
+        ) );
+
+        if ( ! $record ) {
+            return new WP_REST_Response( array( 'error' => 'Dispute not found locally' ), 404 );
+        }
+
+        $order = wc_get_order( $record->order_id );
+        if ( ! $order ) {
+            return new WP_REST_Response( array( 'error' => 'Order not found' ), 404 );
+        }
+
+        // Get reason from Stripe
+        $reason = 'general';
+        if ( ! empty( $this->stripe_api_key ) ) {
+            $resp = wp_remote_get( 'https://api.stripe.com/v1/disputes/' . $dispute_id, array(
+                'headers' => array( 'Authorization' => 'Bearer ' . $this->stripe_api_key ),
+                'timeout' => 5,
+            ) );
+            if ( ! is_wp_error( $resp ) && 200 === wp_remote_retrieve_response_code( $resp ) ) {
+                $d = json_decode( wp_remote_retrieve_body( $resp ) );
+                $reason = $d->reason ?? 'general';
+            }
+        }
+
+        $submitter = new WCM_Evidence_Submitter();
+        $result    = $submitter->auto_stage_evidence( $dispute_id, $order, $reason );
+
+        if ( is_wp_error( $result ) ) {
+            return new WP_REST_Response( array( 'error' => $result->get_error_message() ), 400 );
+        }
+
+        $wpdb->update(
+            $wpdb->prefix . 'wcm_dispute_evidence',
+            array( 'status' => 'staged' ),
+            array( 'stripe_dispute_id' => $dispute_id )
+        );
+
+        return new WP_REST_Response( array( 'success' => true, 'staged' => true ), 200 );
     }
 
     /**
