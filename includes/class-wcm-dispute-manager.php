@@ -195,6 +195,7 @@ class WCM_Dispute_Manager {
             ),
             array( 'stripe_dispute_id' => $dispute->id )
         );
+        $this->send_dispute_update( $dispute, 'dispute_updated' );
     }
 
     private function handle_closed_dispute( $dispute ) {
@@ -216,6 +217,8 @@ class WCM_Dispute_Manager {
                 );
             }
         }
+
+        $this->send_dispute_update( $dispute, 'dispute_closed' );
     }
 
     // ================================================================
@@ -295,10 +298,61 @@ class WCM_Dispute_Manager {
     // ALERTS
     // ================================================================
 
-    private function send_dispute_alert( $order, $dispute, $evidence ) {
+    private function send_dispute_alert( $order, $dispute, $evidence = array() ) {
         if ( '1' !== get_option( 'wcm_send_dispute_alerts', '1' ) ) {
             return;
         }
+        $server = get_option( 'wcm_monitoring_server', '' );
+        if ( empty( $server ) ) {
+            return;
+        }
+
+        $products = array();
+        foreach ( $order->get_items() as $item ) {
+            $products[] = array(
+                'name'  => $item->get_name(),
+                'qty'   => $item->get_quantity(),
+                'total' => $item->get_total(),
+            );
+        }
+
+        $due_by = null;
+        if ( isset( $dispute->evidence_details->due_by ) ) {
+            $due_by = gmdate( 'Y-m-d H:i:s', $dispute->evidence_details->due_by );
+        }
+
+        wp_remote_post( $server, array(
+            'method'   => 'POST',
+            'timeout'  => 5,
+            'blocking' => false,
+            'headers'  => array( 'Content-Type' => 'application/json' ),
+            'body'     => wp_json_encode( array(
+                'type'               => 'dispute_created',
+                'site'               => home_url(),
+                'store_url'          => home_url(),
+                'store_name'         => get_bloginfo( 'name' ),
+                'store_id'           => get_option( 'wcm_store_id', '' ),
+                'dispute_id'         => $dispute->id,
+                'charge_id'          => $dispute->charge,
+                'order_id'           => $order->get_id(),
+                'customer_name'      => $order->get_formatted_billing_full_name(),
+                'customer_email'     => $order->get_billing_email(),
+                'amount'             => $dispute->amount / 100,
+                'currency'           => strtoupper( $dispute->currency ),
+                'reason'             => $dispute->reason,
+                'due_by'             => $due_by,
+                'evidence_generated' => ! empty( $evidence ),
+                'evidence_summary'   => isset( $evidence['rebuttal_text'] ) ? $evidence['rebuttal_text'] : '',
+                'products'           => $products,
+                'timestamp'          => current_time( 'mysql' ),
+            ) ),
+        ) );
+    }
+
+    /**
+     * Send dispute lifecycle update (updated/closed) to monitoring server
+     */
+    private function send_dispute_update( $dispute, $event_type = 'dispute_updated' ) {
         $server = get_option( 'wcm_monitoring_server', '' );
         if ( empty( $server ) ) {
             return;
@@ -310,16 +364,16 @@ class WCM_Dispute_Manager {
             'blocking' => false,
             'headers'  => array( 'Content-Type' => 'application/json' ),
             'body'     => wp_json_encode( array(
-                'type'               => 'dispute_created',
+                'type'               => $event_type,
+                'site'               => home_url(),
                 'store_url'          => home_url(),
                 'store_name'         => get_bloginfo( 'name' ),
                 'dispute_id'         => $dispute->id,
-                'order_id'           => $order->get_id(),
-                'customer_email'     => $order->get_billing_email(),
-                'amount'             => $dispute->amount / 100,
-                'currency'           => strtoupper( $dispute->currency ),
+                'status'             => $dispute->status,
                 'reason'             => $dispute->reason,
-                'evidence_generated' => true,
+                'amount'             => isset( $dispute->amount ) ? $dispute->amount / 100 : null,
+                'currency'           => isset( $dispute->currency ) ? strtoupper( $dispute->currency ) : null,
+                'won'                => $dispute->status === 'won',
                 'timestamp'          => current_time( 'mysql' ),
             ) ),
         ) );

@@ -2,16 +2,17 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useEffect, useState, useCallback } from "react";
 import { api, apiPost } from "../api/client";
 import {
-  LayoutDashboard, Store, Bell, MessageSquare, Settings,
+  LayoutDashboard, Store, Bell, Shield, MessageSquare, Settings,
   RefreshCw, WifiOff, Menu, X, LogOut,
 } from "lucide-react";
 
 const tabs = [
-  { to: "/dashboard",         label: "Overview", icon: LayoutDashboard, end: true },
-  { to: "/dashboard/stores",  label: "Stores",   icon: Store },
-  { to: "/dashboard/alerts",  label: "Alerts",   icon: Bell },
-  { to: "/dashboard/chat",    label: "AI Chat",  icon: MessageSquare },
-  { to: "/dashboard/system",  label: "System",   icon: Settings },
+  { to: "/dashboard",           label: "Overview",  icon: LayoutDashboard, end: true },
+  { to: "/dashboard/stores",    label: "Stores",    icon: Store },
+  { to: "/dashboard/alerts",    label: "Alerts",    icon: Bell },
+  { to: "/dashboard/disputes",  label: "Disputes",  icon: Shield },
+  { to: "/dashboard/chat",      label: "AI Chat",   icon: MessageSquare },
+  { to: "/dashboard/system",    label: "System",    icon: Settings },
 ];
 
 export default function Layout({ onLogout }) {

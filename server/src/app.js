@@ -104,6 +104,7 @@ function createApp() {
   app.use("/api", require("./routes/dashboard"));
   app.use("/api", require("./routes/auth"));
   app.use("/api", require("./routes/chat"));
+  app.use("/api", require("./routes/disputes"));
   app.use("/api", require("./routes/system"));
 
   // -------------------------------------------------------------------------

@@ -1,11 +1,14 @@
 const { Router } = require("express");
 const { createAlert, shouldDeduplicate, queueAlertEmail } = require("../services/alert-service");
 const { upsertStore, findStoreByUrl, getStoreStats, updateStoreStats, touchStore } = require("../services/store-service");
+const { upsertDispute } = require("../services/dispute-service");
 
 const router = Router();
 
 const VALID_TYPES = new Set([
   "dispute_created",
+  "dispute_updated",
+  "dispute_closed",
   "health_check_critical",
   "plugin_activated",
   "plugin_deactivated",
@@ -28,26 +31,80 @@ router.post("/track-woo-error", async (req, res) => {
     }
 
     // Resolve store from URL — uses cached store list (no DB scan per request)
-    const siteObj = findStoreByUrl(site);
+    // Check both 'site' and 'store_url' fields (plugin sends store_url for disputes)
+    const siteObj = findStoreByUrl(site || req.body.store_url);
     const storeId = siteObj?.id || null;
     if (storeId) touchStore(storeId);
 
-    // --- Dispute alerts ---
+    // --- Dispute created ---
     if (type === "dispute_created") {
+      upsertDispute({
+        stripeDisputeId: req.body.dispute_id,
+        stripeChargeId: req.body.charge_id,
+        orderId: req.body.order_id?.toString(),
+        customerName: req.body.customer_name,
+        customerEmail: req.body.customer_email,
+        amount: parseFloat(req.body.amount) || 0,
+        currency: req.body.currency || "USD",
+        reason: req.body.reason,
+        status: "needs_response",
+        dueBy: req.body.due_by || null,
+        evidenceGenerated: req.body.evidence_generated || false,
+        evidenceSummary: req.body.evidence_summary || null,
+        storeId: storeId || null,
+        storeName: req.body.store_name,
+        storeUrl: req.body.store_url,
+        products: req.body.products || [],
+        metadata: req.body.metadata || {},
+      });
+
       const subject = `DISPUTE: ${req.body.dispute_id} on ${req.body.store_name}`;
       const message = [
         `New Stripe dispute detected!`,
         `Store: ${req.body.store_name}`,
         `Dispute ID: ${req.body.dispute_id}`,
-        `Order ID: ${req.body.order_id}`,
-        `Customer: ${req.body.customer_email}`,
-        `Amount: ${req.body.amount} ${req.body.currency}`,
+        `Order #: ${req.body.order_id}`,
+        `Customer: ${req.body.customer_name} (${req.body.customer_email})`,
+        `Amount: $${req.body.amount} ${req.body.currency}`,
         `Reason: ${req.body.reason}`,
-        `Evidence Generated: ${req.body.evidence_generated ? "Yes" : "No"}`,
-        `Time: ${req.body.timestamp}`,
+        `Due By: ${req.body.due_by || "Unknown"}`,
       ].join("\n");
-      createAlert({ subject, message, storeId, severity: "critical", type: "dispute" });
-      queueAlertEmail(subject, message, storeId, "dispute");
+      const dedupKey = `dispute_${req.body.dispute_id}`;
+      if (!shouldDeduplicate(dedupKey)) {
+        createAlert({ subject, message, storeId, severity: "critical", type: "dispute", dedupKey });
+        queueAlertEmail(subject, message, storeId, "dispute");
+      }
+      return res.json({ success: true });
+    }
+
+    // --- Dispute updated ---
+    if (type === "dispute_updated") {
+      upsertDispute({
+        stripeDisputeId: req.body.dispute_id,
+        status: req.body.status,
+        reason: req.body.reason,
+        evidenceGenerated: req.body.evidence_generated,
+        evidenceSummary: req.body.evidence_summary,
+        metadata: req.body.metadata,
+      });
+      return res.json({ success: true });
+    }
+
+    // --- Dispute closed (won/lost) ---
+    if (type === "dispute_closed") {
+      const closedStatus = req.body.won ? "won" : "lost";
+      upsertDispute({
+        stripeDisputeId: req.body.dispute_id,
+        status: closedStatus,
+        metadata: req.body.metadata,
+      });
+
+      const subject = `DISPUTE ${closedStatus.toUpperCase()}: ${req.body.dispute_id} on ${req.body.store_name || "Unknown"}`;
+      const message = `Dispute ${req.body.dispute_id} has been ${closedStatus}.\nAmount: $${req.body.amount || "?"} ${req.body.currency || ""}`;
+      createAlert({ subject, message, storeId, severity: closedStatus === "won" ? "success" : "high", type: "dispute" });
+      if (closedStatus === "lost") {
+        queueAlertEmail(subject, message, storeId, "dispute");
+      }
       return res.json({ success: true });
     }
 

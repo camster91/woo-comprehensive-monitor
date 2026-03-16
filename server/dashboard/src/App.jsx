@@ -6,6 +6,7 @@ import Overview from "./pages/Overview";
 import Stores from "./pages/Stores";
 import Alerts from "./pages/Alerts";
 import Chat from "./pages/Chat";
+import Disputes from "./pages/Disputes";
 import System from "./pages/System";
 import Login from "./pages/Login";
 
@@ -52,6 +53,7 @@ export default function App() {
             <Route index element={<Overview />} />
             <Route path="stores" element={<Stores />} />
             <Route path="alerts" element={<Alerts />} />
+            <Route path="disputes" element={<Disputes />} />
             <Route path="chat" element={<Chat />} />
             <Route path="system" element={<System onLogout={logout} />} />
           </Route>
