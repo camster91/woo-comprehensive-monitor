@@ -573,9 +573,35 @@ class WCM_Evidence_Submitter {
     // ================================================================
 
     private function get_subscription_acknowledgment( $order ) {
+        // Check WCM plugin's acknowledgment meta
         $ack = $order->get_meta( '_wcm_subscription_acknowledgment' );
         if ( ! empty( $ack ) && is_array( $ack ) ) {
             return $ack;
+        }
+
+        // Check standalone Subscription Acknowledgment plugin meta (_wc_sa_*)
+        $sa_ack = $order->get_meta( '_wc_sa_acknowledgment' );
+        if ( 'yes' === $sa_ack ) {
+            return array(
+                'timestamp'  => $order->get_meta( '_wc_sa_acknowledgment_timestamp' ) ?: '',
+                'ip_address' => $order->get_meta( '_wc_sa_acknowledgment_ip' ) ?: '',
+                'source'     => 'subscription-acknowledgment-plugin',
+            );
+        }
+
+        // Check standalone plugin's user meta store (_wc_sa_acknowledgments)
+        $customer_id = $order->get_customer_id();
+        if ( $customer_id ) {
+            $sa_acks = get_user_meta( $customer_id, '_wc_sa_acknowledgments', true );
+            if ( is_array( $sa_acks ) && isset( $sa_acks[ $order->get_id() ] ) ) {
+                $sa_data = $sa_acks[ $order->get_id() ];
+                return array(
+                    'timestamp'  => $sa_data['timestamp'] ?? '',
+                    'ip_address' => $sa_data['ip_address'] ?? '',
+                    'user_agent' => $sa_data['user_agent'] ?? '',
+                    'source'     => 'subscription-acknowledgment-plugin-usermeta',
+                );
+            }
         }
 
         // Fallback: check acknowledgments table
