@@ -56,6 +56,7 @@ function initDB(dbPath) {
   // Versioned migrations — skipped if already applied
   const versionedMigrations = [
     { version: "002", file: "002_dedup_key.sql" },
+    { version: "003", file: "003_disputes_table.sql" },
   ];
 
   // schema_migrations table is created by 002 itself, but we need it first
