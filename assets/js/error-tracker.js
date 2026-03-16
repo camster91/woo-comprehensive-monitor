@@ -162,8 +162,10 @@
         var key = (errorData.error_type || '') + '|' + (errorData.error_message || '').slice(0, 100);
         var now = Date.now();
         if (_reportedErrors[key] && (now - _reportedErrors[key]) < 30000) {
-            return true;
+            return true; // don't update timestamp — avoids writes on every loop iteration
         }
+        // Cap entries to prevent unbounded memory growth from noisy third-party scripts
+        if (Object.keys(_reportedErrors).length > 200) { _reportedErrors = {}; }
         _reportedErrors[key] = now;
         return false;
     }

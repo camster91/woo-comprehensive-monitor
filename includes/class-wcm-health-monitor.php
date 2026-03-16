@@ -300,17 +300,17 @@ class WCM_Health_Monitor {
             } else {
                 $server_url = str_replace( '/api/track-woo-error', '/api/health', $monitoring_server );
                 $response   = wp_remote_get( $server_url, array(
-                    'timeout'   => 5,    // 5s max — was 10s blocking
+                    'timeout'   => 3,
                     'sslverify' => false,
                 ) );
 
                 if ( is_wp_error( $response ) ) {
                     $check['status']                    = 'warning';
                     $check['details']['server_message'] = 'Cannot reach monitoring server: ' . $response->get_error_message();
-                    set_transient( $cache_key, 'Unreachable', 30 * MINUTE_IN_SECONDS );
+                    set_transient( $cache_key, 'Unreachable', 2 * HOUR_IN_SECONDS );
                 } else {
                     $check['details']['monitoring_server'] = 'Connected';
-                    set_transient( $cache_key, 'Connected', HOUR_IN_SECONDS );
+                    set_transient( $cache_key, 'Connected', 6 * HOUR_IN_SECONDS );
                 }
             }
         }
@@ -445,33 +445,47 @@ class WCM_Health_Monitor {
         }
 
         $now             = current_time( 'timestamp' );
-        $seven_days_from = $now + ( 7 * DAY_IN_SECONDS );
+        $now_gmt         = gmdate( 'Y-m-d H:i:s', $now );
+        $seven_days_gmt  = gmdate( 'Y-m-d H:i:s', $now + ( 7 * DAY_IN_SECONDS ) );
 
-        // Cap at 500 subscriptions to prevent full-table loads on large sites.
-        $subscriptions = wcs_get_subscriptions( array(
-            'subscriptions_per_page' => 500,
-            'subscription_status'    => array( 'active', 'pending-cancel' ),
+        // Use direct SQL COUNT queries instead of loading 500 full WC_Subscription objects.
+        // Each hydrated subscription object loads meta, items, and addresses on access,
+        // consuming 60-120 MB on sites with 500+ subscriptions.
+        global $wpdb;
+
+        // Count total active/pending-cancel subscriptions
+        $total_subscriptions = (int) $wpdb->get_var(
+            "SELECT COUNT(*) FROM {$wpdb->posts}
+             WHERE post_type = 'shop_subscription'
+               AND post_status IN ('wc-active','wc-pending-cancel')"
+        );
+
+        // Overdue renewals: next_payment is in the past
+        $overdue_renewals = (int) $wpdb->get_var( $wpdb->prepare(
+            "SELECT COUNT(*) FROM {$wpdb->posts} p
+             INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
+             WHERE p.post_type = 'shop_subscription'
+               AND p.post_status IN ('wc-active','wc-pending-cancel')
+               AND pm.meta_key = '_schedule_next_payment'
+               AND pm.meta_value != ''
+               AND pm.meta_value < %s",
+            $now_gmt
         ) );
 
-        $overdue_renewals = 0;
-        $expiring_soon    = 0;
+        // Expiring soon: end date within next 7 days
+        $expiring_soon = (int) $wpdb->get_var( $wpdb->prepare(
+            "SELECT COUNT(*) FROM {$wpdb->posts} p
+             INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
+             WHERE p.post_type = 'shop_subscription'
+               AND p.post_status IN ('wc-active','wc-pending-cancel')
+               AND pm.meta_key = '_schedule_end'
+               AND pm.meta_value != ''
+               AND pm.meta_value > %s
+               AND pm.meta_value < %s",
+            $now_gmt,
+            $seven_days_gmt
+        ) );
 
-        foreach ( $subscriptions as $subscription ) {
-            $next_payment = $subscription->get_time( 'next_payment' );
-            $end_date     = $subscription->get_time( 'end' );
-
-            if ( $next_payment && $next_payment < $now ) {
-                $overdue_renewals++;
-            }
-            if ( $end_date && $end_date > $now && $end_date < $seven_days_from ) {
-                $expiring_soon++;
-            }
-            // NOTE: per-subscription get_related_orders() + wc_get_order() loop removed.
-            // It generated N×M queries. Failed renewals are counted with a single query below.
-        }
-
-        // Single aggregate query for recent failed renewal orders — replaces N+1 loop.
-        global $wpdb;
         $thirty_days_ago = gmdate( 'Y-m-d H:i:s', $now - 30 * DAY_IN_SECONDS );
 
         if ( class_exists( 'Automattic\WooCommerce\Utilities\OrderUtil' ) &&
@@ -502,7 +516,7 @@ class WCM_Health_Monitor {
             ) );
         }
 
-        $check['details']['total_subscriptions'] = count( $subscriptions );
+        $check['details']['total_subscriptions'] = $total_subscriptions;
         $check['details']['overdue_renewals']    = $overdue_renewals;
         $check['details']['failed_renewals']     = $failed_renewals;
         $check['details']['expiring_soon']       = $expiring_soon;
@@ -630,17 +644,24 @@ class WCM_Health_Monitor {
         global $wpdb;
         $table_name = $wpdb->prefix . 'wcm_health_logs';
 
+        if ( empty( $checks ) ) {
+            return;
+        }
+
+        // Single multi-row INSERT instead of 14 individual round-trips
+        $rows = array();
+        $now  = current_time( 'mysql' );
         foreach ( $checks as $check ) {
-            $wpdb->insert(
-                $table_name,
-                array(
-                    'check_type'  => $check['name'],
-                    'status'      => $check['status'],
-                    'details'     => wp_json_encode( $check['details'] ),
-                    'created_at'  => current_time( 'mysql' ),
-                )
+            $rows[] = $wpdb->prepare(
+                '(%s, %s, %s, %s)',
+                $check['name'],
+                $check['status'],
+                wp_json_encode( $check['details'] ),
+                $now
             );
         }
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- each row is individually prepared above
+        $wpdb->query( "INSERT INTO {$table_name} (check_type, status, details, created_at) VALUES " . implode( ',', $rows ) );
     }
 
     private function send_health_alerts( $checks ) {

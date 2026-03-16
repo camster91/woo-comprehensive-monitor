@@ -787,14 +787,17 @@ class WooComprehensiveMonitor {
      * Check Stripe status and show appropriate notices
      */
     public function check_stripe_status() {
-        // Check for Stripe plugin classes (different versions)
+        // Only run once per hour — loading all payment gateways on every admin_init is expensive
+        if ( get_transient( 'wcm_stripe_status_checked' ) ) {
+            return;
+        }
+
         $stripe_active = false;
         $stripe_gateway_enabled = false;
-        
+
         if (class_exists('WC_Stripe') || class_exists('WC_Stripe_API') || class_exists('WooCommerce\\Stripe\\Gateway')) {
             $stripe_active = true;
-            
-            // Check if Stripe gateway is enabled in WooCommerce settings
+
             if (function_exists('WC') && method_exists(WC(), 'payment_gateways')) {
                 $gateways = WC()->payment_gateways()->payment_gateways();
                 if (isset($gateways['stripe']) && $gateways['stripe']->enabled === 'yes') {
@@ -802,17 +805,16 @@ class WooComprehensiveMonitor {
                 }
             }
         }
-        
-        // Show appropriate notice
+
         if (!$stripe_active) {
             add_action('admin_notices', array($this, 'stripe_missing_notice'));
-            // Log to monitoring server
             $this->log_admin_notice_to_server('stripe_missing', 'Stripe Gateway plugin is not installed or activated.');
         } else if (!$stripe_gateway_enabled) {
             add_action('admin_notices', array($this, 'stripe_disabled_notice'));
-            // Log to monitoring server
             $this->log_admin_notice_to_server('stripe_disabled', 'Stripe Gateway is installed but disabled in WooCommerce settings.');
         }
+
+        set_transient( 'wcm_stripe_status_checked', true, HOUR_IN_SECONDS );
     }
 
     /**

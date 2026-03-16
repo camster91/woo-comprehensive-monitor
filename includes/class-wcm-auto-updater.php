@@ -676,15 +676,16 @@ class WCM_Auto_Updater {
      * Get update status for dashboard
      */
     public static function get_update_status() {
-        $instance = new self();
-        $latest_release = $instance->get_latest_release();
-        
+        // Read cached transient only — never construct a new instance or hit the GitHub API.
+        // The actual API call happens via the cron-scheduled check_for_updates() hook.
+        $latest_release = get_transient( 'wcm_latest_release' );
+
         if ( ! $latest_release ) {
             return array(
                 'available' => false,
                 'current_version' => WCM_VERSION,
                 'latest_version' => WCM_VERSION,
-                'error' => 'Could not fetch release information',
+                'error' => 'Release info not yet cached — next scheduled check will fetch it.',
             );
         }
 
@@ -699,7 +700,7 @@ class WCM_Auto_Updater {
             'release_url' => $latest_release['html_url'],
             'published_at' => $latest_release['published_at'],
             'changelog' => $latest_release['body'],
-            'is_major' => $instance->is_major_update( $current_version, $latest_version ),
+            'is_major' => ( explode( '.', $current_version )[0] !== explode( '.', $latest_version )[0] ),
         );
     }
 
