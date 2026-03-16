@@ -13,6 +13,7 @@ const VALID_TYPES = new Set([
   "plugin_activated",
   "plugin_deactivated",
   "subscription_cancelled",
+  "subscription_converted",
   "subscription_price_adjustment",
   "admin_notice",
   "heartbeat",
@@ -174,6 +175,22 @@ router.post("/track-woo-error", async (req, res) => {
         severity: "medium",
         type: "subscription",
       });
+      return res.json({ success: true });
+    }
+
+    // --- Subscription converted to one-time ---
+    if (type === "subscription_converted") {
+      const subject = `Subscription Converted: ${req.body.store_name}`;
+      const message = [
+        `Customer converted subscription to one-time purchase.`,
+        `Store: ${req.body.store_name}`,
+        `Customer: ${req.body.customer_name} (${req.body.customer_email})`,
+        `Product: ${req.body.product_name}`,
+        `Subscription Price: $${req.body.subscription_price}`,
+        `Regular Price: $${req.body.regular_price}`,
+        `Difference Charged: $${req.body.difference_charged}`,
+      ].join("\n");
+      createAlert({ subject, message, storeId, severity: "medium", type: "subscription" });
       return res.json({ success: true });
     }
 
