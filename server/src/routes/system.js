@@ -1,8 +1,11 @@
 const { Router } = require("express");
+const axios = require("axios");
 const storeService = require("../services/store-service");
 const alertService = require("../services/alert-service");
 const { checkAllStores } = require("../services/health-checker");
 const authService = require("../services/auth-service");
+
+const GITHUB_REPO = "camster91/woo-comprehensive-monitor";
 
 const router = Router();
 
@@ -60,6 +63,63 @@ router.get("/export/all", (req, res) => {
   }));
   const { alerts } = alertService.getAlerts({ limit: 1000 });
   res.json({ exported_at: new Date().toISOString(), stores, alerts });
+});
+
+// Latest plugin release info (cached 1h)
+let _releaseCache = null;
+let _releaseCacheTime = 0;
+
+router.get("/plugin/latest", async (req, res) => {
+  try {
+    const now = Date.now();
+    if (_releaseCache && now - _releaseCacheTime < 3600000) {
+      return res.json(_releaseCache);
+    }
+    const { data } = await axios.get(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
+      headers: { Accept: "application/vnd.github.v3+json", "User-Agent": "WooMonitor-Server" },
+      timeout: 5000,
+    });
+    const zipAsset = data.assets?.find(a => a.name.endsWith(".zip"));
+    _releaseCache = {
+      version: data.tag_name.replace(/^v/, ""),
+      tag: data.tag_name,
+      download_url: zipAsset ? `/api/plugin/download` : data.zipball_url,
+      asset_url: zipAsset?.browser_download_url || null,
+      filename: zipAsset?.name || `${GITHUB_REPO.split("/")[1]}-${data.tag_name}.zip`,
+      size: zipAsset?.size || null,
+      published_at: data.published_at,
+    };
+    _releaseCacheTime = now;
+    res.json(_releaseCache);
+  } catch (err) {
+    res.status(502).json({ error: "Failed to fetch release info: " + err.message });
+  }
+});
+
+router.get("/plugin/download", async (req, res) => {
+  try {
+    // Fetch latest release to get the asset URL
+    const { data } = await axios.get(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
+      headers: { Accept: "application/vnd.github.v3+json", "User-Agent": "WooMonitor-Server" },
+      timeout: 5000,
+    });
+    const zipAsset = data.assets?.find(a => a.name.endsWith(".zip"));
+    if (!zipAsset) return res.status(404).json({ error: "No ZIP asset found in latest release" });
+
+    const filename = zipAsset.name;
+    const download = await axios.get(zipAsset.browser_download_url, {
+      responseType: "stream",
+      timeout: 30000,
+      headers: { "User-Agent": "WooMonitor-Server" },
+    });
+
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    if (zipAsset.size) res.setHeader("Content-Length", zipAsset.size);
+    download.data.pipe(res);
+  } catch (err) {
+    res.status(502).json({ error: "Download failed: " + err.message });
+  }
 });
 
 module.exports = router;

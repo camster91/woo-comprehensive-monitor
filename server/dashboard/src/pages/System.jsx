@@ -4,16 +4,20 @@ import { useToast } from "../components/Toast";
 import { formatUptime, formatBytes } from "../utils/time";
 import {
   Server, Settings, Play, CheckCircle, XCircle, RefreshCw,
-  Cpu, Clock, Shield, Mail, Bot,
+  Cpu, Clock, Shield, Mail, Bot, Download, Package,
 } from "lucide-react";
 
 export default function System({ onLogout }) {
   const [config, setConfig]   = useState(null);
+  const [plugin, setPlugin]   = useState(null);
   const [results, setResults] = useState({});
   const [running, setRunning] = useState(null);
   const toast = useToast();
 
-  useEffect(() => { api("/api/system/config").then(setConfig); }, []);
+  useEffect(() => {
+    api("/api/system/config").then(setConfig);
+    api("/api/plugin/latest").then(setPlugin).catch(() => {});
+  }, []);
 
   const runAction = async (key, label, fn, formatter) => {
     setRunning(key);
@@ -99,6 +103,30 @@ export default function System({ onLogout }) {
           </div>
         </div>
       </div>
+
+      {/* Plugin Download */}
+      {plugin && (
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+          <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2 mb-4">
+            <Package size={15} className="text-slate-400" /> WordPress Plugin
+          </h3>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-slate-700 font-medium">
+                WooCommerce Comprehensive Monitor <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-lg ml-1">v{plugin.version}</span>
+              </p>
+              <p className="text-xs text-slate-400 mt-1">
+                {plugin.filename}{plugin.size ? ` · ${(plugin.size / 1024).toFixed(0)} KB` : ""}
+                {plugin.published_at ? ` · Released ${new Date(plugin.published_at).toLocaleDateString()}` : ""}
+              </p>
+            </div>
+            <a href={`/api/plugin/download?authToken=${localStorage.getItem("authToken")}`}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-xl text-sm font-medium hover:bg-blue-600 transition-colors">
+              <Download size={14} /> Download ZIP
+            </a>
+          </div>
+        </div>
+      )}
 
       {/* Actions */}
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
