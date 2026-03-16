@@ -39,7 +39,7 @@ New table `revenue_snapshots`:
 | Column | Type | Notes |
 |--------|------|-------|
 | id | INTEGER PRIMARY KEY | Auto-increment |
-| store_id | TEXT | FK → stores(id) ON DELETE CASCADE |
+| store_id | TEXT | FK → stores(id) ON DELETE SET NULL (preserve historical revenue data if store removed) |
 | date | TEXT | YYYY-MM-DD |
 | total_revenue | REAL | Sum of completed/processing order totals |
 | order_count | INTEGER | Total orders for the day |
@@ -60,9 +60,9 @@ Indexes: `idx_revenue_store_date` on `(store_id, date)`, `idx_revenue_date` on `
 
 **Functions:**
 
-- `syncStoreRevenue(store)` — Instantiates WooCommerceRestApi with store's credentials. Fetches orders from WC REST API (`GET /wc/v3/orders`) with date range filter and `per_page=100`, paginating as needed. Groups by date, aggregates counts by status and revenue totals. Upserts into `revenue_snapshots` using `INSERT OR REPLACE`. Timeout: 30s per store. Skips stores without API credentials.
+- `syncStoreRevenue(store)` — Instantiates WooCommerceRestApi with store's credentials. Fetches orders from WC REST API (`GET /wc/v3/orders`) with date range filter and `per_page=100`, paginating as needed. Groups by date, aggregates counts by status and revenue totals. Upserts into `revenue_snapshots` using existing `db.run()` with `INSERT OR REPLACE` (uses db.js helpers consistently with other services). Timeout: 30s per store. Skips stores without API credentials.
 
-- `syncAllStores()` — Gets all stores with API credentials from store-service. Iterates with `p-limit(3)` concurrency to avoid overwhelming Hostinger shared hosting. Logs sync progress. Returns summary (synced count, failed count, errors).
+- `syncAllStores()` — Gets all stores with API credentials from store-service. Iterates with `p-limit(3)` concurrency for regular syncs. Uses a `_syncRunning` mutex guard to prevent concurrent syncs (manual trigger via API while cron is running). Returns summary (synced count, failed count, errors). Note: must use p-limit v3 (CommonJS) — v4+ is ESM-only and incompatible with this project.
 
 - `getRevenueSummary(period, storeId?)` — Queries `revenue_snapshots` for the given period (today/7d/30d/90d). Returns: total revenue, total orders, failed count, abandoned carts, refund total, and % change vs previous equivalent period. Optional storeId filter for single-store view.
 
@@ -72,7 +72,7 @@ Indexes: `idx_revenue_store_date` on `(store_id, date)`, `idx_revenue_date` on `
 
 - `getFailedPayments(days, storeId?)` — Returns failed + pending order counts grouped by day.
 
-**Cron schedule:** Registered in `src/index.js` using existing `node-cron`. Every 30 minutes (`*/30 * * * *`). On first run (no data in table), backfills last 90 days by fetching orders with `after` date filter.
+**Cron schedule:** Registered in `src/index.js` using existing `node-cron`. Every 30 minutes (`*/30 * * * *`). On first run (no data in table), backfills last 90 days progressively — first sync fetches last 7 days at `p-limit(3)`, then subsequent syncs extend backwards (30d, 60d, 90d) at `p-limit(1)` to avoid overwhelming Hostinger shared hosting.
 
 **Error handling:** Per-store try/catch. Failed stores logged but don't block others. Stores with invalid/expired credentials get a warning alert created via alert-service (severity: medium, type: "revenue_sync").
 
@@ -80,22 +80,22 @@ Indexes: `idx_revenue_store_date` on `(store_id, date)`, `idx_revenue_date` on `
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/revenue?period=7d&store=<id>` | Revenue summary stats |
+| GET | `/api/revenue?period=7d&store=<id>` | Revenue summary stats. `period` accepts: `today`, `7d`, `30d`, `90d` |
 | GET | `/api/revenue/timeline?days=30&store=<id>` | Daily revenue series for charts |
 | GET | `/api/revenue/stores?period=7d` | Per-store revenue comparison |
 | GET | `/api/revenue/failed?days=7&store=<id>` | Failed payment counts |
 | POST | `/api/revenue/sync` | Trigger manual sync (admin action) |
 
-All routes are behind existing auth middleware (cookie/token auth).
+All routes are behind existing auth middleware (cookie/token auth). Routes are mounted in `app.js` as `app.use("/api", require("./routes/revenue"))`, so the router file uses `/revenue/...` prefixes (not `/api/revenue/...`), consistent with all other route files.
 
 ### Abandoned Carts
 
 Stores have existing cart tracking plugins. Two paths to get the data:
 
-1. **Primary:** If WC REST API exposes cart abandonment data (via plugin's REST endpoints), revenue-service queries it during sync.
+1. **Primary (best-effort/TBD):** If WC REST API exposes cart abandonment data via the installed cart tracking plugin's REST endpoints, revenue-service queries it during sync. Exact endpoint depends on which plugin is installed — determined during implementation.
 2. **Fallback:** Add `cart_abandonment_stats` to the VALID_TYPES set in `tracking.js`. Plugin pushes daily count via existing `/api/track-woo-error` endpoint. Stored in `revenue_snapshots.abandoned_carts`.
 
-If neither source provides data, the abandoned carts stat shows "N/A" — not an error.
+If neither source provides data, the abandoned carts stat shows "N/A" — not an error. This is explicitly a best-effort metric.
 
 ---
 
@@ -158,7 +158,8 @@ If neither source provides data, the abandoned carts stat shows "N/A" — not an
 **`StatCard.jsx`** — Reusable stat card with variants:
 - `variant="default"`: white card, colored icon, dark value
 - `variant="hero"`: gradient background, white text
-- Props: `label`, `value`, `change` (% with + or -), `icon`, `sub`, `variant`
+- Props: `label`, `value`, `change` (% with + or -), `icon`, `sub`, `variant`, `pulse` (optional, for critical alerts)
+- Replaces the local `StatCard` function currently defined inline in `Overview.jsx` (lines 129-152). The existing props (`label`, `value`, `icon`, `color`, `sub`, `pulse`) are mapped to the new API: `color` → `variant` mapping, `pulse` preserved as-is.
 
 **`TimeRangeSelector.jsx`** — Pill toggle for time periods:
 - Options: Today, 7d, 30d, 90d
