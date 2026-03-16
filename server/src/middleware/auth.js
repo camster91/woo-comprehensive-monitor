@@ -3,16 +3,15 @@ const { validateToken, REQUIRE_AUTH } = require("../services/auth-service");
 function authMiddleware(req, res, next) {
   if (!REQUIRE_AUTH) return next();
 
-  // Public endpoints
+  // Public endpoints (paths are relative to the /api mount point)
   const publicPaths = [
-    "/api/health",
-    "/api/track-woo-error",
-    "/api/auth/request-code",
-    "/api/auth/verify-code",
+    "/health",
+    "/track-woo-error",
+    "/auth/request-code",
+    "/auth/verify-code",
   ];
   if (publicPaths.includes(req.path)) return next();
-  if (req.path === "/api/stores" && req.method === "POST") return next();
-  if (req.path === "/download/plugin") return next();
+  if (req.path === "/stores" && req.method === "POST") return next();
 
   const token = req.headers["x-auth-token"] || req.cookies?.authToken || req.query?.authToken;
   const auth = validateToken(token);
@@ -26,8 +25,8 @@ function apiKeyMiddleware(req, res, next) {
   // GET requests always allowed
   if (req.method === "GET") return next();
 
-  // Plugin endpoints skip API key check
-  if (req.path === "/api/track-woo-error") return next();
+  // Plugin endpoints skip API key check (path relative to /api mount)
+  if (req.path === "/track-woo-error") return next();
 
   // Dashboard auth token
   const authToken = req.headers["x-auth-token"] || req.query?.authToken;
