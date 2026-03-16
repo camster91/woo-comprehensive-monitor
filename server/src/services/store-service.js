@@ -149,6 +149,10 @@ function getStoreStats(storeId) {
 }
 
 function updateStoreStats(storeId, updates) {
+  // Verify store exists before touching store_stats (FK constraint)
+  const store = get("SELECT id FROM stores WHERE id = ?", [storeId]);
+  if (!store) return;
+
   run("INSERT OR IGNORE INTO store_stats (store_id) VALUES (?)", [storeId]);
 
   const fields = [];
