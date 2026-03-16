@@ -25,6 +25,7 @@ class WCM_Admin_Dashboard {
         add_action( 'wp_ajax_wcm_create_dispute', array( $this, 'ajax_create_dispute' ) );
         add_action( 'wp_ajax_wcm_update_dispute_status', array( $this, 'ajax_update_dispute_status' ) );
         add_action( 'wp_ajax_wcm_test_stripe', array( $this, 'ajax_test_stripe' ) );
+        add_action( 'wp_ajax_wcm_sync_historical_disputes', array( $this, 'ajax_sync_historical_disputes' ) );
     }
 
     public function add_admin_menu() {
@@ -711,5 +712,29 @@ class WCM_Admin_Dashboard {
 
         $body = json_decode( wp_remote_retrieve_body( $response ), true );
         wp_send_json_error( array( 'message' => 'Stripe error: ' . ( $body['error']['message'] ?? 'Unknown' ) ) );
+    }
+
+    public function ajax_sync_historical_disputes() {
+        check_ajax_referer( 'wcm_admin_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_woocommerce' ) ) {
+            wp_die( 'Unauthorized' );
+        }
+
+        $dispute_manager = new WCM_Dispute_Manager();
+        $result = $dispute_manager->sync_historical_disputes();
+
+        if ( isset( $result['error'] ) ) {
+            wp_send_json_error( array( 'message' => $result['error'] ) );
+        }
+
+        wp_send_json_success( array(
+            'message' => sprintf(
+                'Historical dispute sync complete. Synced: %d, Skipped: %d, Errors: %d',
+                $result['synced'],
+                $result['skipped'],
+                $result['errors']
+            ),
+            'result' => $result,
+        ) );
     }
 }

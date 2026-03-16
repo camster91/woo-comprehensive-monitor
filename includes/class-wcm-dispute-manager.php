@@ -52,6 +52,26 @@ class WCM_Dispute_Manager {
             'callback'            => array( $this, 'handle_stripe_webhook' ),
             'permission_callback' => '__return_true', // Stripe can't send auth headers; we verify via signature
         ) );
+
+        register_rest_route( 'wcm/v1', '/sync-disputes', array(
+            'methods'             => 'POST',
+            'callback'            => array( $this, 'handle_sync_disputes' ),
+            'permission_callback' => function () {
+                return current_user_can( 'manage_woocommerce' );
+            },
+        ) );
+    }
+
+    /**
+     * REST endpoint to trigger historical dispute sync.
+     * Called from the monitoring dashboard or WP admin.
+     */
+    public function handle_sync_disputes( $request ) {
+        $result = $this->sync_historical_disputes();
+        if ( isset( $result['error'] ) ) {
+            return new WP_REST_Response( array( 'success' => false, 'error' => $result['error'] ), 400 );
+        }
+        return new WP_REST_Response( array( 'success' => true, 'result' => $result ), 200 );
     }
 
     public function handle_stripe_webhook( $request ) {
@@ -481,5 +501,153 @@ class WCM_Dispute_Manager {
             "SELECT * FROM {$wpdb->prefix}wcm_dispute_evidence ORDER BY created_at DESC LIMIT %d",
             $limit
         ) );
+    }
+
+    // ================================================================
+    // HISTORICAL DISPUTE SYNC
+    // ================================================================
+
+    /**
+     * Pull all disputes from Stripe for the past year and forward them
+     * to the monitoring server. Uses Stripe's auto-pagination via
+     * `starting_after` cursor. Each dispute is looked up against the
+     * local WooCommerce orders to enrich with customer/product data.
+     *
+     * Returns array with counts: synced, skipped, errors.
+     */
+    public function sync_historical_disputes() {
+        if ( empty( $this->stripe_api_key ) ) {
+            return array( 'error' => 'Stripe API key not configured' );
+        }
+
+        $server = get_option( 'wcm_monitoring_server', '' );
+        if ( empty( $server ) ) {
+            return array( 'error' => 'Monitoring server not configured' );
+        }
+
+        $one_year_ago = strtotime( '-1 year' );
+        $synced  = 0;
+        $skipped = 0;
+        $errors  = 0;
+        $cursor  = null;
+
+        do {
+            $url = 'https://api.stripe.com/v1/disputes?limit=100&created[gte]=' . $one_year_ago;
+            if ( $cursor ) {
+                $url .= '&starting_after=' . $cursor;
+            }
+
+            $response = wp_remote_get( $url, array(
+                'headers' => array( 'Authorization' => 'Bearer ' . $this->stripe_api_key ),
+                'timeout' => 15,
+            ) );
+
+            if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
+                $errors++;
+                break;
+            }
+
+            $body = json_decode( wp_remote_retrieve_body( $response ) );
+            if ( ! $body || ! isset( $body->data ) ) {
+                break;
+            }
+
+            foreach ( $body->data as $dispute ) {
+                $cursor = $dispute->id;
+
+                // Find the WooCommerce order
+                $order_id = $this->find_order_by_charge_id( $dispute->charge );
+                $order    = $order_id ? wc_get_order( $order_id ) : null;
+
+                // Build products array from order
+                $products = array();
+                if ( $order ) {
+                    foreach ( $order->get_items() as $item ) {
+                        $products[] = array(
+                            'name'  => $item->get_name(),
+                            'qty'   => $item->get_quantity(),
+                            'total' => $item->get_total(),
+                        );
+                    }
+                }
+
+                // Map Stripe status to our status
+                $status = $dispute->status;
+                if ( $status === 'warning_needs_response' || $status === 'needs_response' ) {
+                    $status = 'needs_response';
+                } elseif ( $status === 'warning_under_review' || $status === 'under_review' ) {
+                    $status = 'under_review';
+                }
+
+                $due_by = null;
+                if ( isset( $dispute->evidence_details->due_by ) ) {
+                    $due_by = gmdate( 'Y-m-d H:i:s', $dispute->evidence_details->due_by );
+                }
+
+                $payload = array(
+                    'type'               => 'dispute_created',
+                    'site'               => home_url(),
+                    'store_url'          => home_url(),
+                    'store_name'         => get_bloginfo( 'name' ),
+                    'store_id'           => get_option( 'wcm_store_id', '' ),
+                    'dispute_id'         => $dispute->id,
+                    'charge_id'          => $dispute->charge,
+                    'order_id'           => $order_id ?: null,
+                    'customer_name'      => $order ? $order->get_formatted_billing_full_name() : null,
+                    'customer_email'     => $order ? $order->get_billing_email() : null,
+                    'amount'             => $dispute->amount / 100,
+                    'currency'           => strtoupper( $dispute->currency ),
+                    'reason'             => $dispute->reason,
+                    'status'             => $status,
+                    'due_by'             => $due_by,
+                    'evidence_generated' => isset( $dispute->evidence_details->has_evidence ) && $dispute->evidence_details->has_evidence,
+                    'products'           => $products,
+                    'timestamp'          => gmdate( 'Y-m-d H:i:s', $dispute->created ),
+                );
+
+                // Send to monitoring server (blocking so we don't overwhelm it)
+                $result = wp_remote_post( $server, array(
+                    'method'   => 'POST',
+                    'timeout'  => 10,
+                    'blocking' => true,
+                    'headers'  => array( 'Content-Type' => 'application/json' ),
+                    'body'     => wp_json_encode( $payload ),
+                ) );
+
+                if ( is_wp_error( $result ) ) {
+                    $errors++;
+                } else {
+                    $synced++;
+                }
+
+                // Also store locally if not already present
+                global $wpdb;
+                $exists = $wpdb->get_var( $wpdb->prepare(
+                    "SELECT id FROM {$wpdb->prefix}wcm_dispute_evidence WHERE stripe_dispute_id = %s",
+                    $dispute->id
+                ) );
+                if ( ! $exists && $order ) {
+                    $this->handle_new_dispute( $dispute );
+                    // If dispute is closed, update status
+                    if ( in_array( $status, array( 'won', 'lost' ), true ) ) {
+                        $wpdb->update(
+                            $wpdb->prefix . 'wcm_dispute_evidence',
+                            array( 'status' => $status ),
+                            array( 'stripe_dispute_id' => $dispute->id )
+                        );
+                    }
+                } else {
+                    $skipped++;
+                }
+            }
+
+            $has_more = ! empty( $body->has_more );
+        } while ( $has_more );
+
+        return array(
+            'synced'  => $synced,
+            'skipped' => $skipped,
+            'errors'  => $errors,
+        );
     }
 }

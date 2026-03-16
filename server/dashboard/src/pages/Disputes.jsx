@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { api, apiDelete } from "../api/client";
+import { api, apiPost, apiDelete } from "../api/client";
 import { useToast } from "../components/Toast";
 import { timeAgo } from "../utils/time";
 import {
   Shield, AlertTriangle, CheckCircle, XCircle, Clock,
-  ChevronDown, ChevronRight, Trash2, Filter, DollarSign,
+  ChevronDown, ChevronRight, Trash2, Filter, DollarSign, RefreshCw,
 } from "lucide-react";
 
 const REASONS = {
@@ -33,8 +33,23 @@ export default function Disputes() {
   const [stores, setStores] = useState([]);
   const [filters, setFilters] = useState({ storeId: "", status: "" });
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [expanded, setExpanded] = useState(new Set());
   const toast = useToast();
+
+  const syncHistorical = async () => {
+    setSyncing(true);
+    try {
+      const res = await apiPost("/api/disputes/sync", {});
+      const summary = (res.results || []).map(r => `${r.store}: ${r.status}${r.result ? ` (synced: ${r.result.synced})` : ""}`).join(", ");
+      toast(summary || "Sync complete");
+      fetchDisputes();
+      api("/api/disputes/stats").then(setStats);
+    } catch (err) {
+      toast(err.message, "error");
+    }
+    setSyncing(false);
+  };
 
   const fetchDisputes = (offset = 0, append = false) => {
     setLoading(true);
@@ -86,8 +101,8 @@ export default function Disputes() {
         </div>
       )}
 
-      {/* Filters */}
-      <div className="flex gap-2 items-center">
+      {/* Filters + Sync */}
+      <div className="flex gap-2 items-center flex-wrap">
         <Filter size={14} className="text-slate-400" />
         <select value={filters.storeId} onChange={(e) => setFilters((f) => ({ ...f, storeId: e.target.value }))}
           className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white">
@@ -102,6 +117,12 @@ export default function Disputes() {
           <option value="won">Won</option>
           <option value="lost">Lost</option>
         </select>
+        <div className="ml-auto">
+          <button onClick={syncHistorical} disabled={syncing}
+            className="flex items-center gap-2 px-4 py-1.5 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 disabled:opacity-50 transition-colors">
+            {syncing ? <><RefreshCw size={13} className="animate-spin" /> Syncing...</> : <><RefreshCw size={13} /> Sync from Stripe</>}
+          </button>
+        </div>
       </div>
 
       {/* Table */}
