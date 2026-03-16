@@ -86,6 +86,7 @@ router.post("/track-woo-error", async (req, res) => {
         wordpressVersion: req.body.wordpress_version,
         phpVersion: req.body.php_version,
       });
+      touchStore(req.body.store_id);
       if (req.body.features) {
         updateStoreStats(req.body.store_id, { features: req.body.features });
       }

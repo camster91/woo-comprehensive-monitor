@@ -67,7 +67,6 @@ function upsertStore({
     if (woocommerceVersion) { fields.push("woocommerce_version = ?"); params.push(woocommerceVersion); }
     if (wordpressVersion)   { fields.push("wordpress_version = ?");   params.push(wordpressVersion); }
     if (phpVersion)         { fields.push("php_version = ?");         params.push(phpVersion); }
-    fields.push("last_seen = datetime('now')");
     fields.push("updated_at = datetime('now')");
     if (fields.length) {
       run(`UPDATE stores SET ${fields.join(", ")} WHERE id = ?`, [...params, id]);
@@ -78,8 +77,8 @@ function upsertStore({
 
   run(
     `INSERT INTO stores (id, name, url, consumer_key, consumer_secret,
-      plugin_version, woocommerce_version, wordpress_version, php_version, last_seen)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      plugin_version, woocommerce_version, wordpress_version, php_version)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id, name, url,
       consumerKey || null, consumerSecret || null,
