@@ -2,6 +2,7 @@ const { Router } = require("express");
 const { createAlert, shouldDeduplicate, queueAlertEmail } = require("../services/alert-service");
 const { upsertStore, findStoreByUrl, getStoreStats, updateStoreStats, touchStore } = require("../services/store-service");
 const { upsertDispute } = require("../services/dispute-service");
+const { run } = require("../db");
 
 const router = Router();
 
@@ -20,6 +21,7 @@ const VALID_TYPES = new Set([
   "javascript_error",
   "checkout_error",
   "ajax_add_to_cart_error",
+  "cart_abandonment_stats",
 ]);
 
 router.post("/track-woo-error", async (req, res) => {
@@ -243,6 +245,19 @@ router.post("/track-woo-error", async (req, res) => {
         if (req.body.store_id && req.body.store_name && req.body.store_url) {
           upsertStore({ id: req.body.store_id, name: req.body.store_name, url: req.body.store_url });
         }
+      }
+      return res.json({ success: true });
+    }
+
+    // --- Cart abandonment stats ---
+    if (type === "cart_abandonment_stats") {
+      const count = parseInt(req.body.abandoned_count) || 0;
+      const date = new Date().toISOString().split("T")[0];
+      if (storeId && count >= 0) {
+        run(
+          `UPDATE revenue_snapshots SET abandoned_carts = ? WHERE store_id = ? AND date = ?`,
+          [count, storeId, date]
+        );
       }
       return res.json({ success: true });
     }

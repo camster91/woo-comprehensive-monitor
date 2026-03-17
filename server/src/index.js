@@ -56,6 +56,12 @@ async function start() {
   // Silent-store detection every hour (separate from WooCommerce API health checks)
   cron.schedule("0 * * * *", () => checkSilentStores().catch(e => console.error("[Silent]", e.message)));
 
+  // Revenue sync every 30 minutes
+  const { syncAllStores: syncRevenue } = require("./services/revenue-service");
+  cron.schedule("*/30 * * * *", () => {
+    syncRevenue().catch(e => console.error("[Revenue]", e.message));
+  });
+
   // Cleanup expired auth tokens daily at 3am
   cron.schedule("0 3 * * *", () => cleanupExpired());
 
@@ -103,6 +109,9 @@ async function start() {
 
     // Delay initial health check to avoid slamming all 25 stores 5s after boot
     setTimeout(() => checkAllStores(), 30 * 1000);
+
+    // Initial revenue sync 60s after boot
+    setTimeout(() => syncRevenue().catch(e => console.error("[Revenue]", e.message)), 60 * 1000);
   });
 }
 
