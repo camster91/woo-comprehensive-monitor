@@ -67,6 +67,26 @@ export default function App() {
     return () => window.removeEventListener("woo:401", onUnauth);
   }, []);
 
+  // Validate saved token on mount
+  const [checking, setChecking] = useState(!!token);
+  useEffect(() => {
+    if (!token || !role) { setChecking(false); return; }
+    if (role === "admin") {
+      fetch("/api/auth/me", { headers: { "x-auth-token": token } })
+        .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+        .then(() => setChecking(false))
+        .catch(() => { logout(); setChecking(false); });
+    } else {
+      fetch("/api/portal/dashboard", { headers: { "x-portal-token": token } })
+        .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+        .then(data => { setUser(data.user || user); setChecking(false); })
+        .catch(() => { logout(); setChecking(false); });
+    }
+  }, []);
+
+  // Show nothing while validating token
+  if (checking) return null;
+
   // Not logged in — show unified login
   if (!token || !role) {
     return (

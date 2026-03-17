@@ -12,8 +12,9 @@ export async function apiFetch(url, options = {}) {
   const res = await fetch(`${BASE}${url}`, { ...options, headers });
   if (res.status === 401) {
     localStorage.removeItem("authToken");
-    // Dispatch an event so App.jsx can switch to the login view without a
-    // hard page reload (avoids infinite redirect loop).
+    localStorage.removeItem("portalToken");
+    localStorage.removeItem("role");
+    localStorage.removeItem("userData");
     window.dispatchEvent(new Event("woo:401"));
     throw new Error("Authentication required");
   }
