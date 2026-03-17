@@ -2,7 +2,7 @@ import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard, DollarSign, Store, Bell, Shield,
   MessageSquare, Settings, PanelLeftClose, PanelLeft, LogOut, Globe, Package, Users, Wrench,
-  Brain, Sliders,
+  Brain, Sliders, Repeat,
 } from "lucide-react";
 
 const navItems = [
@@ -14,6 +14,7 @@ const navItems = [
   { to: "/uptime",    label: "Uptime",    icon: Globe },
   { to: "/inventory", label: "Inventory", icon: Package },
   { to: "/manage",    label: "Manage",    icon: Wrench },
+  { to: "/subscriptions", label: "Subs", icon: Repeat },
   { to: "/portal-users", label: "Portal", icon: Users },
   { to: "/tickets",   label: "Tickets",   icon: MessageSquare },
   { to: "/insights",  label: "Insights",  icon: Brain },

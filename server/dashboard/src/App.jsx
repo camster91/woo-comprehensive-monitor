@@ -17,6 +17,7 @@ import Manage from "./pages/Manage";
 import PortalUsers from "./pages/PortalUsers";
 import Tickets from "./pages/Tickets";
 import Insights from "./pages/Insights";
+import Subscriptions from "./pages/Subscriptions";
 import Settings from "./pages/Settings";
 import PortalOverview from "./pages/portal/PortalOverview";
 import PortalTickets from "./pages/portal/PortalTickets";
@@ -135,6 +136,7 @@ export default function App() {
             <Route path="uptime" element={<Uptime />} />
             <Route path="inventory" element={<Inventory />} />
             <Route path="manage" element={<Manage />} />
+            <Route path="subscriptions" element={<Subscriptions />} />
             <Route path="portal-users" element={<PortalUsers />} />
             <Route path="tickets" element={<Tickets />} />
             <Route path="insights" element={<Insights />} />
