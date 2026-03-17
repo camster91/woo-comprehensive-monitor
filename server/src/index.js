@@ -112,6 +112,20 @@ async function start() {
     syncInventory().catch(e => console.error("[Inventory]", e.message));
   });
 
+  // Trigger WP-Cron on all sites every 15 minutes (staggered, sequential)
+  // Sites have DISABLE_WP_CRON=true, so cron only runs when we trigger it here
+  cron.schedule("*/15 * * * *", async () => {
+    const stores = require("./services/store-service").getAllStores();
+    const axios = require("axios");
+    for (const store of stores) {
+      try {
+        await axios.get(`${store.url}/wp-cron.php?doing_wp_cron`, { timeout: 10000 });
+      } catch (_) {}
+      await new Promise(r => setTimeout(r, 2000)); // 2s gap between sites
+    }
+    console.log(`[WP-Cron] Triggered ${stores.length} sites`);
+  });
+
   // Cleanup expired auth tokens daily at 3am
   cron.schedule("0 3 * * *", () => cleanupExpired());
 
