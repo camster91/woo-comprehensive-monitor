@@ -107,6 +107,12 @@ async function start() {
     checkUptime().catch(e => console.error("[Uptime]", e.message));
   });
 
+  // Inventory sync every 30 minutes (piggybacks with revenue)
+  const { syncAllStores: syncInventory } = require("./services/inventory-service");
+  cron.schedule("*/30 * * * *", () => {
+    syncInventory().catch(e => console.error("[Inventory]", e.message));
+  });
+
   // Cleanup expired auth tokens daily at 3am
   cron.schedule("0 3 * * *", () => cleanupExpired());
 
@@ -160,6 +166,9 @@ async function start() {
 
     // Initial uptime check 90s after boot
     setTimeout(() => checkUptime().catch(e => console.error("[Uptime]", e.message)), 90 * 1000);
+
+    // Initial inventory sync 120s after boot
+    setTimeout(() => syncInventory().catch(e => console.error("[Inventory]", e.message)), 120 * 1000);
   });
 }
 
