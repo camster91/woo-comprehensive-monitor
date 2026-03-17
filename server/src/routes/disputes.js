@@ -72,10 +72,9 @@ router.get("/disputes/:id/evidence", async (req, res) => {
   }
 
   try {
-    const authHeader = "Basic " + Buffer.from(`${store.consumer_key}:${store.consumer_secret}`).toString("base64");
     const { data } = await axios.get(
-      `${store.url}/wp-json/wcm/v1/disputes/${dispute.stripe_dispute_id}/evidence`,
-      { headers: { Authorization: authHeader }, timeout: 15000 }
+      `${store.url}/wp-json/wcm/v1/disputes/${dispute.stripe_dispute_id}/evidence?consumer_key=${encodeURIComponent(store.consumer_key)}&consumer_secret=${encodeURIComponent(store.consumer_secret)}`,
+      { timeout: 15000 }
     );
     res.json(data);
   } catch (err) {
@@ -97,11 +96,10 @@ router.post("/disputes/:id/submit", async (req, res) => {
   }
 
   try {
-    const authHeader = "Basic " + Buffer.from(`${store.consumer_key}:${store.consumer_secret}`).toString("base64");
     const { data } = await axios.post(
-      `${store.url}/wp-json/wcm/v1/disputes/${dispute.stripe_dispute_id}/submit`,
+      `${store.url}/wp-json/wcm/v1/disputes/${dispute.stripe_dispute_id}/submit?consumer_key=${encodeURIComponent(store.consumer_key)}&consumer_secret=${encodeURIComponent(store.consumer_secret)}`,
       {},
-      { headers: { Authorization: authHeader }, timeout: 30000 }
+      { timeout: 30000 }
     );
 
     // Update dispute status in our DB
@@ -133,11 +131,10 @@ router.post("/disputes/:id/stage", async (req, res) => {
   }
 
   try {
-    const authHeader = "Basic " + Buffer.from(`${store.consumer_key}:${store.consumer_secret}`).toString("base64");
     const { data } = await axios.post(
-      `${store.url}/wp-json/wcm/v1/disputes/${dispute.stripe_dispute_id}/stage`,
+      `${store.url}/wp-json/wcm/v1/disputes/${dispute.stripe_dispute_id}/stage?consumer_key=${encodeURIComponent(store.consumer_key)}&consumer_secret=${encodeURIComponent(store.consumer_secret)}`,
       {},
-      { headers: { Authorization: authHeader }, timeout: 30000 }
+      { timeout: 30000 }
     );
 
     disputeService.upsertDispute({
@@ -165,14 +162,12 @@ router.post("/disputes/sync", async (req, res) => {
 
     try {
       // Call the plugin's REST endpoint to trigger sync
-      const authHeader = "Basic " + Buffer.from(`${store.consumer_key}:${store.consumer_secret}`).toString("base64");
+      // Use query param auth (WC processes globally) since custom WCM endpoints
+      // don't recognize WC Basic Auth outside the wc/v3 namespace
       const { data } = await axios.post(
-        `${store.url}/wp-json/wcm/v1/sync-disputes`,
+        `${store.url}/wp-json/wcm/v1/sync-disputes?consumer_key=${encodeURIComponent(store.consumer_key)}&consumer_secret=${encodeURIComponent(store.consumer_secret)}`,
         {},
-        {
-          headers: { Authorization: authHeader },
-          timeout: 120000, // 2 min — historical sync can take a while
-        }
+        { timeout: 120000 }
       );
       results.push({ store: store.name, status: "ok", result: data.result || data });
     } catch (err) {

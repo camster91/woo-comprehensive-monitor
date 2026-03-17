@@ -77,11 +77,10 @@ async function start() {
           continue;
         }
         try {
-          const authHeader = "Basic " + Buffer.from(`${dispute.consumer_key}:${dispute.consumer_secret}`).toString("base64");
           await require("axios").post(
-            `${dispute.store_api_url}/wp-json/wcm/v1/disputes/${dispute.stripe_dispute_id}/submit`,
+            `${dispute.store_api_url}/wp-json/wcm/v1/disputes/${dispute.stripe_dispute_id}/submit?consumer_key=${encodeURIComponent(dispute.consumer_key)}&consumer_secret=${encodeURIComponent(dispute.consumer_secret)}`,
             {},
-            { headers: { Authorization: authHeader }, timeout: 30000 }
+            { timeout: 30000 }
           );
           clearAutoSubmit(dispute.id);
           console.log(`[AutoSubmit] Submitted evidence for ${dispute.stripe_dispute_id}`);
