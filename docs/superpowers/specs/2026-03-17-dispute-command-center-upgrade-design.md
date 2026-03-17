@@ -36,13 +36,13 @@ Index: `CREATE INDEX IF NOT EXISTS idx_disputes_auto_submit ON disputes(auto_sub
 
 **dispute-service.js — new functions:**
 
-- `getDueForAutoSubmit()` — queries disputes where `auto_submit_at <= datetime('now') AND hold = 0 AND status = 'needs_response'`. Returns array of disputes with their store details.
-- `setHold(id, hold)` — updates `hold` column (1 = held, 0 = released). When releasing, resets `auto_submit_at` to now + 24 hours.
-- `setAutoSubmitAt(id, timestamp)` — sets the auto-submit timer. Called by tracking.js when a dispute is created with evidence staged.
+- `getDueForAutoSubmit()` — queries disputes where `auto_submit_at <= datetime('now') AND hold = 0 AND status IN ('needs_response', 'warning_needs_response')`. Returns array of disputes joined with store credentials (consumer_key, consumer_secret, url) needed for the submission API call.
+- `setHold(id, hold)` — updates `hold` column. On hold (hold=1): sets `auto_submit_at = NULL`. On release (hold=0): sets `auto_submit_at = datetime('now', '+24 hours')`.
+- `setAutoSubmitAt(stripeDisputeId, timestamp)` — sets the auto-submit timer by stripe_dispute_id (not internal id). Called by tracking.js when a dispute is created with evidence staged, since tracking.js has the stripe_dispute_id but not the internal row id.
 
 **Auto-submit cron (index.js):**
 
-New cron job every 15 minutes (`*/15 * * * *`). Calls `getDueForAutoSubmit()`, then for each dispute:
+New cron job every 15 minutes, offset by 5 to avoid collision with health check cron (`5,20,35,50 * * * *`). Calls `getDueForAutoSubmit()`, then for each dispute:
 1. Look up the store's API credentials
 2. Call the store's `POST /wp-json/wcm/v1/disputes/{stripeId}/submit` via WooCommerceRestApi or axios
 3. On success: update dispute status metadata with `evidence_submitted: true`, clear `auto_submit_at`
@@ -51,14 +51,20 @@ New cron job every 15 minutes (`*/15 * * * *`). Calls `getDueForAutoSubmit()`, t
 
 **tracking.js — modification:**
 
-When a `dispute_created` event is received and the dispute has `evidence_generated: true`, set `auto_submit_at` to `datetime('now', '+24 hours')` on the upserted dispute.
+When a `dispute_created` event is received and the dispute has `evidence_generated: true`, call `setAutoSubmitAt(req.body.dispute_id, ...)` using the stripe_dispute_id from the request body to set `auto_submit_at` to 24 hours from now.
 
 ### API Changes
 
 **New endpoints in disputes.js:**
 
-- `POST /api/disputes/:id/hold` — sets hold = 1, clears auto_submit_at
-- `POST /api/disputes/:id/release` — sets hold = 0, resets auto_submit_at to now + 24h
+- `POST /api/disputes/:id/hold` — calls `setHold(id, 1)` (sets hold=1, clears auto_submit_at)
+- `POST /api/disputes/:id/release` — calls `setHold(id, 0)` (sets hold=0, resets auto_submit_at to now + 24h)
+
+**Modification to existing endpoint:**
+
+- `POST /api/disputes/:id/submit` — after successful manual submission, clear `auto_submit_at` (set to NULL) and `hold` (set to 0) so the timer doesn't fire for an already-submitted dispute.
+
+**Route ordering note:** The new `/analytics` and `/deadlines` GET routes (Section 2 & 3) MUST be registered BEFORE the existing `GET /disputes/:id` route, otherwise Express will match `:id` with "analytics"/"deadlines" as strings. Follow the existing pattern where `/disputes/stats` is already registered before `/:id`.
 
 ### Dashboard Changes
 
@@ -81,7 +87,7 @@ Countdown updates every 60 seconds via the existing auto-refresh cycle (no need 
 
 `getDisputeAnalytics(period)` — accepts period string ("30d", "90d", "all"). Returns object with three arrays:
 
-1. **byStore:** `SELECT store_name, COUNT(*) as total, SUM(CASE WHEN status='won' THEN 1 ELSE 0 END) as won, SUM(CASE WHEN status='lost' THEN 1 ELSE 0 END) as lost, SUM(CASE WHEN status='needs_response' THEN 1 ELSE 0 END) as needs_response, SUM(amount) as total_amount, SUM(CASE WHEN status='lost' THEN amount ELSE 0 END) as lost_amount FROM disputes WHERE created_at >= ? GROUP BY store_name ORDER BY total DESC`
+1. **byStore:** `SELECT store_name, COUNT(*) as total, SUM(CASE WHEN status='won' THEN 1 ELSE 0 END) as won, SUM(CASE WHEN status='lost' THEN 1 ELSE 0 END) as lost, SUM(CASE WHEN status IN ('needs_response', 'warning_needs_response') THEN 1 ELSE 0 END) as needs_response, SUM(amount) as total_amount, SUM(CASE WHEN status='lost' THEN amount ELSE 0 END) as lost_amount FROM disputes WHERE created_at >= ? GROUP BY store_name ORDER BY total DESC`
    - `win_rate` calculated in JS: `won / (won + lost) * 100` (avoid division by zero)
 
 2. **byReason:** `SELECT reason, COUNT(*) as total, SUM(CASE WHEN status='won' THEN 1 ELSE 0 END) as won, SUM(CASE WHEN status='lost' THEN 1 ELSE 0 END) as lost FROM disputes WHERE created_at >= ? GROUP BY reason ORDER BY total DESC`
