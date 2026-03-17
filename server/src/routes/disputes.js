@@ -20,6 +20,17 @@ router.get("/disputes/stats", (req, res) => {
   res.json(disputeService.getDisputeStats());
 });
 
+router.get("/disputes/analytics", (req, res) => {
+  const period = req.query.period || "30d";
+  const analytics = disputeService.getDisputeAnalytics(period);
+  res.json({ status: "ok", ...analytics });
+});
+
+router.get("/disputes/deadlines", (req, res) => {
+  const deadlines = disputeService.getUpcomingDeadlines();
+  res.json({ status: "ok", deadlines });
+});
+
 router.get("/disputes/:id", (req, res) => {
   const dispute = disputeService.getDispute(parseInt(req.params.id));
   if (!dispute) return res.status(404).json({ error: "Dispute not found" });
@@ -29,6 +40,20 @@ router.get("/disputes/:id", (req, res) => {
 router.delete("/disputes/:id", (req, res) => {
   disputeService.deleteDispute(parseInt(req.params.id));
   res.json({ success: true });
+});
+
+router.post("/disputes/:id/hold", (req, res) => {
+  const dispute = disputeService.getDispute(parseInt(req.params.id));
+  if (!dispute) return res.status(404).json({ error: "Dispute not found" });
+  disputeService.setHold(dispute.id, 1);
+  res.json({ success: true, message: "Auto-submit paused" });
+});
+
+router.post("/disputes/:id/release", (req, res) => {
+  const dispute = disputeService.getDispute(parseInt(req.params.id));
+  if (!dispute) return res.status(404).json({ error: "Dispute not found" });
+  disputeService.setHold(dispute.id, 0);
+  res.json({ success: true, message: "Auto-submit resumed, will submit in 24h" });
 });
 
 // Get evidence preview for a dispute (proxies to the store's REST API)
@@ -85,6 +110,8 @@ router.post("/disputes/:id/submit", async (req, res) => {
       evidenceGenerated: true,
       metadata: { ...dispute.metadata, evidence_submitted: true, submitted_at: new Date().toISOString() },
     });
+
+    disputeService.clearAutoSubmit(dispute.id);
 
     res.json({ success: true, result: data });
   } catch (err) {
