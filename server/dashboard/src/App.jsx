@@ -9,6 +9,7 @@ import Chat from "./pages/Chat";
 import Disputes from "./pages/Disputes";
 import System from "./pages/System";
 import Login from "./pages/Login";
+import Revenue from "./pages/Revenue";
 
 function useAuth() {
   const [token, setToken] = useState(() => localStorage.getItem("authToken") || null);
@@ -51,6 +52,7 @@ export default function App() {
         <Routes>
           <Route path="/dashboard" element={<Layout onLogout={logout} />}>
             <Route index element={<Overview />} />
+            <Route path="revenue" element={<Revenue />} />
             <Route path="stores" element={<Stores />} />
             <Route path="alerts" element={<Alerts />} />
             <Route path="disputes" element={<Disputes />} />
