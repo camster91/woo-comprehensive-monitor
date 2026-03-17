@@ -111,6 +111,7 @@ function createApp() {
   app.use("/api", require("./routes/uptime"));
   app.use("/api", require("./routes/inventory"));
   app.use("/api", require("./routes/portal"));
+  app.use("/api", require("./routes/manage"));
 
   // -------------------------------------------------------------------------
   // Serve React dashboard (production build)
