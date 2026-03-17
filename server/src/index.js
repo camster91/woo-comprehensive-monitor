@@ -101,6 +101,12 @@ async function start() {
     }
   });
 
+  // Uptime checks every 5 minutes (offset to :02, :07, etc.)
+  const { checkAllStores: checkUptime } = require("./services/uptime-service");
+  cron.schedule("2,7,12,17,22,27,32,37,42,47,52,57 * * * *", () => {
+    checkUptime().catch(e => console.error("[Uptime]", e.message));
+  });
+
   // Cleanup expired auth tokens daily at 3am
   cron.schedule("0 3 * * *", () => cleanupExpired());
 
@@ -151,6 +157,9 @@ async function start() {
 
     // Initial revenue sync 60s after boot
     setTimeout(() => syncRevenue().catch(e => console.error("[Revenue]", e.message)), 60 * 1000);
+
+    // Initial uptime check 90s after boot
+    setTimeout(() => checkUptime().catch(e => console.error("[Uptime]", e.message)), 90 * 1000);
   });
 }
 
