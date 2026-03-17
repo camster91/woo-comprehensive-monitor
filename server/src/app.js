@@ -106,6 +106,7 @@ function createApp() {
   app.use("/api", require("./routes/chat"));
   app.use("/api", require("./routes/disputes"));
   app.use("/api", require("./routes/system"));
+  app.use("/api", require("./routes/revenue"));
 
   // -------------------------------------------------------------------------
   // Serve React dashboard (production build)
