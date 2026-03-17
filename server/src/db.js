@@ -58,6 +58,7 @@ function initDB(dbPath) {
     { version: "002", file: "002_dedup_key.sql" },
     { version: "003", file: "003_disputes_table.sql" },
     { version: "004", file: "004_revenue_snapshots.sql" },
+    { version: "005", file: "005_dispute_auto_submit.sql" },
   ];
 
   // schema_migrations table is created by 002 itself, but we need it first
