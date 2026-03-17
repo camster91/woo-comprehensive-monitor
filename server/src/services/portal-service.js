@@ -35,7 +35,7 @@ function authenticatePortal(email, password) {
   if (!verifyPassword(password, user.password_hash)) return null;
 
   const token = generateToken();
-  const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days
+  const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days
   run("UPDATE portal_users SET token = ?, token_expires = ? WHERE id = ?", [token, expires, user.id]);
 
   return {
