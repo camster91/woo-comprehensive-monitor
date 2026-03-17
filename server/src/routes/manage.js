@@ -185,4 +185,14 @@ router.post("/manage/:storeId/core/update", async (req, res) => {
   }
 });
 
+// Auto-login: generate a one-time login URL for a store's wp-admin
+router.post("/manage/:storeId/auto-login", async (req, res) => {
+  try {
+    const data = await proxyPost(req.params.storeId, "auto-login/generate");
+    res.json(data);
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 module.exports = router;

@@ -6,6 +6,7 @@ import {
   Plus, Store, ExternalLink, Clock, Wifi, WifiOff,
   AlertTriangle, ChevronRight, ShieldCheck, Trash2,
 } from "lucide-react";
+import WpLoginButton from "../components/WpLoginButton";
 
 export default function Stores() {
   const [stores, setStores]   = useState([]);
@@ -111,7 +112,7 @@ function StoreCard({ store, onClick }) {
         </span>
         <div className="flex items-center gap-2">
           {store.hasApiCredentials && (
-            <span className="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded text-[10px]">API</span>
+            <WpLoginButton storeId={store.id} />
           )}
           {store.plugin_version && (
             <span className="text-slate-300">v{store.plugin_version}</span>

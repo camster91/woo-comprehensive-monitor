@@ -8,6 +8,7 @@ import {
   Package, RefreshCw, Download, ChevronDown, ChevronRight,
   Check, AlertTriangle, Loader, Power, PowerOff,
 } from "lucide-react";
+import WpLoginButton from "../components/WpLoginButton";
 
 export default function Manage() {
   const [summary, setSummary] = useState(null);
@@ -222,6 +223,7 @@ export default function Manage() {
                   <p className="text-sm font-medium text-slate-800">{store.store_name}</p>
                   <p className="text-xs text-slate-400">WP {store.wp_version} {"\u00b7"} {store.active_plugins}/{store.total_plugins} plugins active</p>
                 </div>
+                <WpLoginButton storeId={store.store_id} />
                 {store.error ? (
                   <span className="text-xs text-red-500">Error</span>
                 ) : hasUpdates > 0 ? (
