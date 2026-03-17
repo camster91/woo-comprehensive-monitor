@@ -5,18 +5,18 @@ import {
 } from "lucide-react";
 
 const navItems = [
-  { to: "/dashboard",          label: "Overview",  icon: LayoutDashboard, end: true },
-  { to: "/dashboard/revenue",  label: "Revenue",   icon: DollarSign },
-  { to: "/dashboard/stores",   label: "Stores",    icon: Store },
-  { to: "/dashboard/alerts",   label: "Alerts",    icon: Bell },
-  { to: "/dashboard/disputes", label: "Disputes",  icon: Shield },
-  { to: "/dashboard/uptime",   label: "Uptime",    icon: Globe },
-  { to: "/dashboard/inventory", label: "Inventory", icon: Package },
-  { to: "/dashboard/manage",       label: "Manage",    icon: Wrench },
-  { to: "/dashboard/portal-users", label: "Portal", icon: Users },
-  { to: "/dashboard/tickets",  label: "Tickets",   icon: MessageSquare },
-  { to: "/dashboard/chat",     label: "AI Chat",   icon: MessageSquare },
-  { to: "/dashboard/system",   label: "System",    icon: Settings },
+  { to: "/",          label: "Overview",  icon: LayoutDashboard, end: true },
+  { to: "/revenue",   label: "Revenue",   icon: DollarSign },
+  { to: "/stores",    label: "Stores",    icon: Store },
+  { to: "/alerts",    label: "Alerts",    icon: Bell },
+  { to: "/disputes",  label: "Disputes",  icon: Shield },
+  { to: "/uptime",    label: "Uptime",    icon: Globe },
+  { to: "/inventory", label: "Inventory", icon: Package },
+  { to: "/manage",    label: "Manage",    icon: Wrench },
+  { to: "/portal-users", label: "Portal", icon: Users },
+  { to: "/tickets",   label: "Tickets",   icon: MessageSquare },
+  { to: "/chat",      label: "AI Chat",   icon: MessageSquare },
+  { to: "/system",    label: "System",    icon: Settings },
 ];
 
 export default function Sidebar({ collapsed, onToggle, onLogout, badgeCount }) {

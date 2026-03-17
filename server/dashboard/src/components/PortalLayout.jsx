@@ -2,8 +2,8 @@ import { Outlet, NavLink } from "react-router-dom";
 import { LogOut, LayoutDashboard, MessageSquare } from "lucide-react";
 
 const navItems = [
-  { to: "/portal", label: "Overview", icon: LayoutDashboard, end: true },
-  { to: "/portal/tickets", label: "Tickets", icon: MessageSquare },
+  { to: "/", label: "Overview", icon: LayoutDashboard, end: true },
+  { to: "/tickets", label: "Tickets", icon: MessageSquare },
 ];
 
 export default function PortalLayout({ user, onLogout }) {

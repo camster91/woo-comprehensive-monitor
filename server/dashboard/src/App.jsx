@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { ToastProvider } from "./components/Toast";
 import Layout from "./components/Layout";
+import PortalLayout from "./components/PortalLayout";
 import Overview from "./pages/Overview";
 import Stores from "./pages/Stores";
 import Alerts from "./pages/Alerts";
@@ -15,91 +16,89 @@ import Inventory from "./pages/Inventory";
 import Manage from "./pages/Manage";
 import PortalUsers from "./pages/PortalUsers";
 import Tickets from "./pages/Tickets";
-import PortalLogin from "./pages/portal/PortalLogin";
 import PortalOverview from "./pages/portal/PortalOverview";
 import PortalTickets from "./pages/portal/PortalTickets";
-import PortalLayout from "./components/PortalLayout";
 
-function useAuth() {
-  const [token, setToken] = useState(() => localStorage.getItem("authToken") || null);
+export default function App() {
+  const [role, setRole] = useState(() => localStorage.getItem("role") || null); // "admin" or "client"
+  const [token, setToken] = useState(() => localStorage.getItem("authToken") || localStorage.getItem("portalToken") || null);
+  const [user, setUser] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("userData")); } catch { return null; }
+  });
 
-  function login(newToken) {
+  function loginAdmin(newToken) {
     localStorage.setItem("authToken", newToken);
+    localStorage.setItem("role", "admin");
+    localStorage.removeItem("portalToken");
     setToken(newToken);
+    setRole("admin");
+    setUser(null);
+  }
+
+  function loginClient(newToken, userData) {
+    localStorage.setItem("portalToken", newToken);
+    localStorage.setItem("role", "client");
+    localStorage.setItem("userData", JSON.stringify(userData));
+    localStorage.removeItem("authToken");
+    setToken(newToken);
+    setRole("client");
+    setUser(userData);
   }
 
   function logout() {
+    if (role === "client") {
+      fetch("/api/portal/logout", { method: "POST", headers: { "x-portal-token": token } }).catch(() => {});
+    } else {
+      fetch("/api/auth/logout", { method: "POST", headers: { "x-auth-token": token } }).catch(() => {});
+    }
     localStorage.removeItem("authToken");
+    localStorage.removeItem("portalToken");
+    localStorage.removeItem("role");
+    localStorage.removeItem("userData");
     setToken(null);
+    setRole(null);
+    setUser(null);
   }
 
-  // Listen for 401 events dispatched by the API client so any component can
-  // trigger a logout without prop-drilling.
+  // Listen for 401 events
   useEffect(() => {
     function onUnauth() { logout(); }
     window.addEventListener("woo:401", onUnauth);
     return () => window.removeEventListener("woo:401", onUnauth);
   }, []);
 
-  return { token, login, logout };
-}
-
-function PortalApp() {
-  const [token, setToken] = useState(() => localStorage.getItem("portalToken") || null);
-  const [user, setUser] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("portalUser")); } catch { return null; }
-  });
-
-  function login(newToken, userData) {
-    localStorage.setItem("portalToken", newToken);
-    localStorage.setItem("portalUser", JSON.stringify(userData));
-    setToken(newToken);
-    setUser(userData);
-  }
-
-  function logout() {
-    fetch("/api/portal/logout", { method: "POST", headers: { "x-portal-token": token } }).catch(() => {});
-    localStorage.removeItem("portalToken");
-    localStorage.removeItem("portalUser");
-    setToken(null);
-    setUser(null);
-  }
-
-  if (!token) return <PortalLogin onLogin={login} />;
-
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/portal" element={<PortalLayout user={user} onLogout={logout} />}>
-          <Route index element={<PortalOverview token={token} user={user} />} />
-          <Route path="tickets" element={<PortalTickets token={token} />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/portal" />} />
-      </Routes>
-    </BrowserRouter>
-  );
-}
-
-export default function App() {
-  if (window.location.pathname.startsWith("/portal")) {
-    return <ToastProvider><PortalApp /></ToastProvider>;
-  }
-
-  const { token, login, logout } = useAuth();
-
-  if (!token) {
+  // Not logged in — show unified login
+  if (!token || !role) {
     return (
       <ToastProvider>
-        <Login onLogin={login} />
+        <Login onAdminLogin={loginAdmin} onClientLogin={loginClient} />
       </ToastProvider>
     );
   }
 
+  // Client role — simple portal view
+  if (role === "client") {
+    return (
+      <ToastProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<PortalLayout user={user} onLogout={logout} />}>
+              <Route index element={<PortalOverview token={token} user={user} />} />
+              <Route path="tickets" element={<PortalTickets token={token} />} />
+            </Route>
+            <Route path="*" element={<Navigate to="/" />} />
+          </Routes>
+        </BrowserRouter>
+      </ToastProvider>
+    );
+  }
+
+  // Admin role — full dashboard
   return (
     <ToastProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/dashboard" element={<Layout onLogout={logout} />}>
+          <Route path="/" element={<Layout onLogout={logout} />}>
             <Route index element={<Overview />} />
             <Route path="revenue" element={<Revenue />} />
             <Route path="stores" element={<Stores />} />
@@ -113,7 +112,7 @@ export default function App() {
             <Route path="chat" element={<Chat />} />
             <Route path="system" element={<System onLogout={logout} />} />
           </Route>
-          <Route path="*" element={<Navigate to="/dashboard" />} />
+          <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </BrowserRouter>
     </ToastProvider>
