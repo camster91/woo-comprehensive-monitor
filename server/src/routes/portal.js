@@ -9,13 +9,43 @@ const ticketService = require("../services/ticket-service");
 
 const router = Router();
 
-// Public: portal login (no auth required)
+// Public: request magic code
+router.post("/portal/request-code", async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: "Email required" });
+
+  const result = portalService.requestPortalCode(email);
+  if (!result) return res.status(404).json({ error: "No account found for this email" });
+
+  // Send the code via email
+  const { sendEmail } = require("../services/email-service");
+  await sendEmail({
+    to: email,
+    subject: `Your login code: ${result.code}`,
+    text: `Your 6-digit login code is: ${result.code}\n\nThis code expires in 10 minutes.\n\nIf you didn't request this, you can safely ignore this email.`,
+  });
+
+  res.json({ status: "ok", message: "Code sent" });
+});
+
+// Public: verify magic code
+router.post("/portal/verify-code", (req, res) => {
+  const { email, code } = req.body;
+  if (!email || !code) return res.status(400).json({ error: "Email and code required" });
+
+  const result = portalService.verifyPortalCode(email, code);
+  if (!result) return res.status(401).json({ error: "Invalid or expired code" });
+
+  res.json({ status: "ok", token: result.token, user: result.user });
+});
+
+// Legacy: portal login with password (backward compat)
 router.post("/portal/login", (req, res) => {
   const { email, password } = req.body;
-  if (!email || !password) return res.status(400).json({ error: "Email and password required" });
+  if (!email || !password) return res.status(400).json({ error: "Email and code required" });
 
   const result = portalService.authenticatePortal(email, password);
-  if (!result) return res.status(401).json({ error: "Invalid email or password" });
+  if (!result) return res.status(401).json({ error: "Invalid credentials" });
 
   res.json({ status: "ok", token: result.token, user: result.user });
 });
