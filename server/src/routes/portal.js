@@ -5,6 +5,7 @@ const revenueService = require("../services/revenue-service");
 const disputeService = require("../services/dispute-service");
 const alertService = require("../services/alert-service");
 const storeService = require("../services/store-service");
+const ticketService = require("../services/ticket-service");
 
 const router = Router();
 
@@ -68,6 +69,36 @@ router.get("/portal/alerts", portalAuthMiddleware, (req, res) => {
   res.json({ alerts, total });
 });
 
+// Portal: submit a ticket
+router.post("/portal/tickets", portalAuthMiddleware, (req, res) => {
+  const { subject, message, priority } = req.body;
+  if (!subject || !message) return res.status(400).json({ error: "Subject and message required" });
+  const id = ticketService.createTicket({
+    storeId: req.portalUser.store_id,
+    portalUserId: req.portalUser.id,
+    subject, message, priority,
+  });
+  res.json({ status: "ok", id });
+});
+
+// Portal: view my tickets
+router.get("/portal/tickets", portalAuthMiddleware, (req, res) => {
+  const result = ticketService.getTickets({
+    storeId: req.portalUser.store_id,
+    limit: parseInt(req.query.limit) || 50,
+    offset: parseInt(req.query.offset) || 0,
+  });
+  res.json(result);
+});
+
+// Portal: view single ticket
+router.get("/portal/tickets/:id", portalAuthMiddleware, (req, res) => {
+  const ticket = ticketService.getTicket(parseInt(req.params.id));
+  if (!ticket) return res.status(404).json({ error: "Ticket not found" });
+  if (ticket.store_id !== req.portalUser.store_id) return res.status(403).json({ error: "Not your ticket" });
+  res.json(ticket);
+});
+
 // Admin routes for managing portal users (uses existing admin auth)
 router.get("/portal-users", (req, res) => {
   const users = portalService.listPortalUsers();
@@ -87,6 +118,46 @@ router.post("/portal-users", (req, res) => {
 
 router.delete("/portal-users/:id", (req, res) => {
   portalService.deletePortalUser(parseInt(req.params.id));
+  res.json({ status: "ok" });
+});
+
+// Admin: view all tickets
+router.get("/tickets", (req, res) => {
+  const { storeId, status, limit, offset } = req.query;
+  const result = ticketService.getTickets({
+    storeId: storeId || undefined,
+    status: status || undefined,
+    limit: parseInt(limit) || 50,
+    offset: parseInt(offset) || 0,
+  });
+  res.json(result);
+});
+
+// Admin: get ticket stats
+router.get("/tickets/stats", (req, res) => {
+  res.json(ticketService.getTicketStats());
+});
+
+// Admin: view single ticket
+router.get("/tickets/:id", (req, res) => {
+  const ticket = ticketService.getTicket(parseInt(req.params.id));
+  if (!ticket) return res.status(404).json({ error: "Ticket not found" });
+  res.json(ticket);
+});
+
+// Admin: reply to ticket
+router.post("/tickets/:id/reply", (req, res) => {
+  const { reply } = req.body;
+  if (!reply) return res.status(400).json({ error: "Reply required" });
+  ticketService.replyToTicket(parseInt(req.params.id), reply);
+  res.json({ status: "ok" });
+});
+
+// Admin: update ticket status
+router.patch("/tickets/:id", (req, res) => {
+  const { status } = req.body;
+  if (!status) return res.status(400).json({ error: "Status required" });
+  ticketService.updateTicketStatus(parseInt(req.params.id), status);
   res.json({ status: "ok" });
 });
 

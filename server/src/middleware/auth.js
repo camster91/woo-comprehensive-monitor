@@ -13,6 +13,8 @@ function authMiddleware(req, res, next) {
     "/portal/logout",
   ];
   if (publicPaths.includes(req.path)) return next();
+  // Portal routes use their own portalAuthMiddleware — exempt the entire /portal/ prefix
+  if (req.path.startsWith("/portal/")) return next();
   if (req.path === "/stores" && req.method === "POST") return next();
 
   const token = req.headers["x-auth-token"] || req.cookies?.authToken || req.query?.authToken;
