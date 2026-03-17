@@ -45,7 +45,7 @@ export default function Sidebar({ collapsed, onToggle, onLogout, badgeCount }) {
               to={item.to}
               end={item.end}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium transition-colors relative ${
+                `flex items-center gap-3 px-2.5 py-2.5 rounded-lg text-sm font-medium transition-colors relative ${
                   isActive
                     ? "bg-indigo-50 text-indigo-600"
                     : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
@@ -69,14 +69,14 @@ export default function Sidebar({ collapsed, onToggle, onLogout, badgeCount }) {
       <div className="border-t border-gray-100 p-2 space-y-1">
         <button
           onClick={onToggle}
-          className="flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-50 hover:text-slate-600 w-full transition-colors"
+          className="flex items-center gap-3 px-2.5 py-2.5 rounded-lg text-sm text-slate-400 hover:bg-slate-50 hover:text-slate-600 w-full transition-colors"
         >
           {collapsed ? <PanelLeft size={18} /> : <PanelLeftClose size={18} />}
           {!collapsed && <span>Collapse</span>}
         </button>
         <button
           onClick={onLogout}
-          className="flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm text-slate-400 hover:bg-red-50 hover:text-red-500 w-full transition-colors"
+          className="flex items-center gap-3 px-2.5 py-2.5 rounded-lg text-sm text-slate-400 hover:bg-red-50 hover:text-red-500 w-full transition-colors"
         >
           <LogOut size={18} />
           {!collapsed && <span>Sign out</span>}

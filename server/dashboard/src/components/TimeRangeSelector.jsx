@@ -12,7 +12,7 @@ export default function TimeRangeSelector({ value, onChange, options = DEFAULT_O
         <button
           key={opt.value}
           onClick={() => onChange(opt.value)}
-          className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+          className={`px-3 py-2 text-xs font-medium rounded-lg transition-colors ${
             value === opt.value
               ? "bg-indigo-50 text-indigo-600"
               : "bg-gray-100 text-gray-500 hover:bg-gray-200"

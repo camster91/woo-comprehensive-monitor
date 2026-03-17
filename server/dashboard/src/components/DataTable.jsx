@@ -25,53 +25,84 @@ export default function DataTable({ columns, data, onRowClick }) {
     : data;
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-gray-100">
-            {columns.map((col) => (
-              <th
-                key={col.key}
-                onClick={() => col.sortable !== false && handleSort(col.key)}
-                className={`text-left py-3 px-3 text-xs font-medium text-slate-400 uppercase tracking-wider ${
-                  col.sortable !== false ? "cursor-pointer hover:text-slate-600 select-none" : ""
-                }`}
-              >
-                <span className="flex items-center gap-1">
-                  {col.label}
-                  {sortKey === col.key && (
-                    sortDir === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />
-                  )}
-                </span>
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((row, i) => (
-            <tr
-              key={row.id || row.store_id || i}
-              onClick={() => onRowClick?.(row)}
-              className={`border-b border-gray-50 transition-colors ${
-                onRowClick ? "cursor-pointer hover:bg-indigo-50/50" : ""
-              } ${i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}
-            >
+    <div>
+      {/* Desktop table */}
+      <div className="hidden md:block overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-100">
               {columns.map((col) => (
-                <td key={col.key} className="py-3 px-3 text-slate-700">
-                  {col.render ? col.render(row[col.key], row) : row[col.key]}
-                </td>
+                <th
+                  key={col.key}
+                  onClick={() => col.sortable !== false && handleSort(col.key)}
+                  className={`text-left py-3 px-3 text-xs font-medium text-slate-400 uppercase tracking-wider ${
+                    col.sortable !== false ? "cursor-pointer hover:text-slate-600 select-none" : ""
+                  }`}
+                >
+                  <span className="flex items-center gap-1">
+                    {col.label}
+                    {sortKey === col.key && (
+                      sortDir === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />
+                    )}
+                  </span>
+                </th>
               ))}
             </tr>
-          ))}
-          {sorted.length === 0 && (
-            <tr>
-              <td colSpan={columns.length} className="py-8 text-center text-slate-400 text-sm">
-                No data available
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {sorted.map((row, i) => (
+              <tr
+                key={row.id || row.store_id || i}
+                onClick={() => onRowClick?.(row)}
+                className={`border-b border-gray-50 transition-colors ${
+                  onRowClick ? "cursor-pointer hover:bg-indigo-50/50" : ""
+                } ${i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}
+              >
+                {columns.map((col) => (
+                  <td key={col.key} className="py-3 px-3 text-slate-700">
+                    {col.render ? col.render(row[col.key], row) : row[col.key]}
+                  </td>
+                ))}
+              </tr>
+            ))}
+            {sorted.length === 0 && (
+              <tr>
+                <td colSpan={columns.length} className="py-8 text-center text-slate-400 text-sm">
+                  No data available
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mobile card view */}
+      <div className="md:hidden space-y-2">
+        {sorted.map((row, i) => (
+          <div
+            key={row.id || row.store_id || i}
+            onClick={() => onRowClick?.(row)}
+            className={`bg-white border border-gray-100 rounded-lg p-3 space-y-1.5 ${
+              onRowClick ? "cursor-pointer active:bg-indigo-50" : ""
+            }`}
+          >
+            {columns.map((col) => {
+              if (!col.label) return null;
+              const val = col.render ? col.render(row[col.key], row) : row[col.key];
+              if (val === null || val === undefined || val === "") return null;
+              return (
+                <div key={col.key} className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-slate-400 shrink-0">{col.label}</span>
+                  <span className="text-sm text-slate-700 text-right truncate">{val}</span>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+        {sorted.length === 0 && (
+          <div className="py-8 text-center text-slate-400 text-sm">No data available</div>
+        )}
+      </div>
     </div>
   );
 }
