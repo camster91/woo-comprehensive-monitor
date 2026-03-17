@@ -60,6 +60,7 @@ function initDB(dbPath) {
     { version: "004", file: "004_revenue_snapshots.sql" },
     { version: "005", file: "005_dispute_auto_submit.sql" },
     { version: "006", file: "006_uptime_checks.sql" },
+    { version: "007", file: "007_portal_users.sql" },
     { version: "008", file: "008_product_snapshots.sql" },
   ];
 
