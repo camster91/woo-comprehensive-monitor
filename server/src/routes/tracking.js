@@ -61,6 +61,13 @@ router.post("/track-woo-error", async (req, res) => {
         metadata: req.body.metadata || {},
       });
 
+      // Set auto-submit timer if evidence was generated
+      if (req.body.evidence_generated) {
+        const { setAutoSubmitAt } = require("../services/dispute-service");
+        const submitAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+        setAutoSubmitAt(req.body.dispute_id, submitAt);
+      }
+
       const subject = `DISPUTE: ${req.body.dispute_id} on ${req.body.store_name}`;
       const message = [
         `New Stripe dispute detected!`,

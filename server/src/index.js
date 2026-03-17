@@ -62,6 +62,45 @@ async function start() {
     syncRevenue().catch(e => console.error("[Revenue]", e.message));
   });
 
+  // Auto-submit dispute evidence every 15 min (offset from health check)
+  const { getDueForAutoSubmit, clearAutoSubmit } = require("./services/dispute-service");
+  const { createAlert } = require("./services/alert-service");
+  let _autoSubmitRunning = false;
+  cron.schedule("5,20,35,50 * * * *", async () => {
+    if (_autoSubmitRunning) return;
+    _autoSubmitRunning = true;
+    try {
+      const due = getDueForAutoSubmit();
+      for (const dispute of due) {
+        if (!dispute.consumer_key || !dispute.consumer_secret || !dispute.store_api_url) {
+          console.log(`[AutoSubmit] Skipping ${dispute.stripe_dispute_id} — no store credentials`);
+          continue;
+        }
+        try {
+          const authHeader = "Basic " + Buffer.from(`${dispute.consumer_key}:${dispute.consumer_secret}`).toString("base64");
+          await require("axios").post(
+            `${dispute.store_api_url}/wp-json/wcm/v1/disputes/${dispute.stripe_dispute_id}/submit`,
+            {},
+            { headers: { Authorization: authHeader }, timeout: 30000 }
+          );
+          clearAutoSubmit(dispute.id);
+          console.log(`[AutoSubmit] Submitted evidence for ${dispute.stripe_dispute_id}`);
+        } catch (err) {
+          console.error(`[AutoSubmit] Failed ${dispute.stripe_dispute_id}: ${err.message}`);
+          createAlert({
+            subject: `Auto-submit failed: ${dispute.stripe_dispute_id}`,
+            message: `Failed to auto-submit evidence for dispute ${dispute.stripe_dispute_id} on ${dispute.store_name}. Error: ${err.message}`,
+            storeId: dispute.store_id,
+            severity: "high",
+            type: "dispute",
+          });
+        }
+      }
+    } finally {
+      _autoSubmitRunning = false;
+    }
+  });
+
   // Cleanup expired auth tokens daily at 3am
   cron.schedule("0 3 * * *", () => cleanupExpired());
 
