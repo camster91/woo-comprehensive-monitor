@@ -204,7 +204,7 @@ export default function Revenue() {
             </button>
           )}
         </div>
-        <div style={{ height: 280 }}>
+        <div className="h-[200px] sm:h-[280px]">
           {chartData ? <Line data={chartData} options={chartOptions} /> : <SkeletonCard className="h-full" />}
         </div>
       </div>

@@ -78,7 +78,7 @@ export default function Layout({ onLogout }) {
       {/* Main content area */}
       <div className={`transition-all duration-200 ${collapsed ? "sm:ml-[60px]" : "sm:ml-[200px]"}`}>
         <header className="sticky top-0 bg-white/80 backdrop-blur-sm border-b border-gray-100 z-10 h-14 flex items-center justify-between px-4 sm:px-6">
-          <button className="sm:hidden p-1.5 hover:bg-slate-100 rounded-lg" onClick={() => setMobileOpen(!mobileOpen)}>
+          <button className="sm:hidden p-2 hover:bg-slate-100 rounded-lg" onClick={() => setMobileOpen(!mobileOpen)}>
             {mobileOpen ? <X size={18} /> : <Menu size={18} className="text-slate-600" />}
           </button>
 
@@ -104,7 +104,7 @@ export default function Layout({ onLogout }) {
           </div>
         </header>
 
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <main className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6">
           <Outlet context={{ overview, refresh }} />
         </main>
       </div>

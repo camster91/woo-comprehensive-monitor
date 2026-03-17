@@ -145,7 +145,7 @@ function ActiveDisputes() {
 
       {deadlines.length > 0 && <DeadlineTimeline deadlines={deadlines} onClickDispute={scrollToDispute} />}
 
-      <div className="flex gap-2 items-center flex-wrap">
+      <div className="flex gap-2 gap-y-2 items-center flex-wrap">
         <Filter size={14} className="text-slate-400" />
         <select value={filters.storeId} onChange={(e) => setFilters((f) => ({ ...f, storeId: e.target.value }))}
           className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white">
@@ -178,7 +178,7 @@ function ActiveDisputes() {
           return (
             <div key={d.id} id={`dispute-${d.id}`} className="border-b border-gray-50 last:border-0">
               <div onClick={() => toggle(d.id)}
-                className="grid grid-cols-[1fr_1fr_80px_1fr_110px_100px_30px] gap-2 px-4 py-3 items-center cursor-pointer hover:bg-slate-50 transition-colors text-sm">
+                className="flex flex-col gap-1 md:grid md:grid-cols-[1fr_1fr_80px_1fr_110px_100px_30px] gap-2 px-4 py-3 items-center cursor-pointer hover:bg-slate-50 transition-colors text-sm">
                 <span className="font-medium text-slate-700 truncate">{d.store_name || "Unknown"}</span>
                 <span className="text-slate-600 truncate">{d.customer_name || d.customer_email || "\u2014"}</span>
                 <span className="font-medium text-slate-700">${d.amount?.toFixed(2) || "0.00"}</span>
@@ -522,7 +522,7 @@ function AnalyticsTab() {
       {data.overTime.length > 0 && (
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
           <h3 className="text-sm font-semibold text-slate-700 mb-4">Disputes Over Time</h3>
-          <div style={{ height: 280 }}>
+          <div className="h-[200px] sm:h-[280px]">
             <Line data={trendChart} options={chartOpts("line")} />
           </div>
         </div>

@@ -65,7 +65,7 @@ export default function Chat() {
   const clearChat = () => { setMessages([]); setStoreData(null); setSelectedStore(""); };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col" style={{ height: "calc(100vh - 200px)", minHeight: "500px" }}>
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col" style={{ height: "calc(100vh - 180px)", minHeight: "300px" }}>
       {/* ── Toolbar ── */}
       <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-3 flex-wrap">
         <Bot size={16} className="text-indigo-500 shrink-0" />
