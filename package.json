@@ -1,0 +1,16 @@
+{
+  "name": "woo-monitor",
+  "version": "3.2.0",
+  "description": "WooCommerce Monitoring Server",
+  "main": "server/src/index.js",
+  "scripts": {
+    "start": "cd server && node src/index.js",
+    "build": "echo 'Dashboard pre-built, skipping'"
+  },
+  "author": "Ashbi",
+  "license": "ISC",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  }
+}
