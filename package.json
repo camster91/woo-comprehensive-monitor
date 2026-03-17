@@ -1,16 +1,16 @@
 {
-  "name": "woo-monitor",
+  "name": "woo-comprehensive-monitor",
   "version": "3.2.0",
   "description": "WooCommerce Monitoring Server",
   "main": "server/src/index.js",
   "scripts": {
     "start": "cd server && node src/index.js",
-    "build": "echo 'Dashboard pre-built, skipping'"
+    "build": "echo 'Dashboard pre-built in server/dashboard/dist'",
+    "postinstall": "cd server && npm install --production --ignore-scripts=false"
   },
-  "author": "Ashbi",
-  "license": "ISC",
-  "type": "commonjs",
   "engines": {
     "node": ">=18"
-  }
+  },
+  "author": "Ashbi",
+  "license": "ISC"
 }
