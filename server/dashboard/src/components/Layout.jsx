@@ -37,7 +37,7 @@ export default function Layout({ onLogout }) {
 
   useEffect(() => {
     const crit = overview?.criticalAlerts || 0;
-    document.title = crit > 0 ? `(${crit}) WooCommerce Monitor` : "WooCommerce Monitor";
+    document.title = crit > 0 ? `(${crit}) Influencers Link` : "Influencers Link";
   }, [overview?.criticalAlerts]);
 
   function toggleCollapse() {

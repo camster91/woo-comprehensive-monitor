@@ -12,8 +12,8 @@ export default function PortalLayout({ user, onLogout }) {
       <header className="bg-white border-b border-gray-100">
         <div className="flex items-center justify-between px-4 sm:px-6 h-14">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-white font-bold text-sm">W</div>
-            <span className="text-sm font-bold text-slate-900">Client Portal</span>
+            <img src="/favicon-192.png" alt="IL" className="w-8 h-8 rounded-lg" />
+            <span className="text-sm font-bold text-slate-900">Influencers Link</span>
           </div>
           <nav className="flex items-center gap-1">
             {navItems.map(({ to, label, icon: Icon, end }) => (

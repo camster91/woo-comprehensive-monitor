@@ -27,11 +27,9 @@ export default function Sidebar({ collapsed, onToggle, onLogout, badgeCount }) {
       }`}
     >
       <div className="flex items-center gap-2.5 px-3 h-14 border-b border-gray-100 shrink-0">
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-white font-bold text-sm shrink-0">
-          W
-        </div>
+        <img src="/favicon-192.png" alt="IL" className="w-8 h-8 rounded-lg shrink-0" />
         {!collapsed && (
-          <span className="text-sm font-bold text-slate-900 truncate">WCM</span>
+          <span className="text-sm font-bold text-slate-900 truncate">Influencers Link</span>
         )}
       </div>
 
