@@ -12,6 +12,10 @@ import Login from "./pages/Login";
 import Revenue from "./pages/Revenue";
 import Uptime from "./pages/Uptime";
 import Inventory from "./pages/Inventory";
+import PortalUsers from "./pages/PortalUsers";
+import PortalLogin from "./pages/portal/PortalLogin";
+import PortalOverview from "./pages/portal/PortalOverview";
+import PortalLayout from "./components/PortalLayout";
 
 function useAuth() {
   const [token, setToken] = useState(() => localStorage.getItem("authToken") || null);
@@ -37,7 +41,46 @@ function useAuth() {
   return { token, login, logout };
 }
 
+function PortalApp() {
+  const [token, setToken] = useState(() => localStorage.getItem("portalToken") || null);
+  const [user, setUser] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("portalUser")); } catch { return null; }
+  });
+
+  function login(newToken, userData) {
+    localStorage.setItem("portalToken", newToken);
+    localStorage.setItem("portalUser", JSON.stringify(userData));
+    setToken(newToken);
+    setUser(userData);
+  }
+
+  function logout() {
+    fetch("/api/portal/logout", { method: "POST", headers: { "x-portal-token": token } }).catch(() => {});
+    localStorage.removeItem("portalToken");
+    localStorage.removeItem("portalUser");
+    setToken(null);
+    setUser(null);
+  }
+
+  if (!token) return <PortalLogin onLogin={login} />;
+
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/portal" element={<PortalLayout user={user} onLogout={logout} />}>
+          <Route index element={<PortalOverview token={token} user={user} />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/portal" />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
 export default function App() {
+  if (window.location.pathname.startsWith("/portal")) {
+    return <ToastProvider><PortalApp /></ToastProvider>;
+  }
+
   const { token, login, logout } = useAuth();
 
   if (!token) {
@@ -60,6 +103,7 @@ export default function App() {
             <Route path="disputes" element={<Disputes />} />
             <Route path="uptime" element={<Uptime />} />
             <Route path="inventory" element={<Inventory />} />
+            <Route path="portal-users" element={<PortalUsers />} />
             <Route path="chat" element={<Chat />} />
             <Route path="system" element={<System onLogout={logout} />} />
           </Route>
