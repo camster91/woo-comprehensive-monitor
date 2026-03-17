@@ -13,8 +13,10 @@ import Revenue from "./pages/Revenue";
 import Uptime from "./pages/Uptime";
 import Inventory from "./pages/Inventory";
 import PortalUsers from "./pages/PortalUsers";
+import Tickets from "./pages/Tickets";
 import PortalLogin from "./pages/portal/PortalLogin";
 import PortalOverview from "./pages/portal/PortalOverview";
+import PortalTickets from "./pages/portal/PortalTickets";
 import PortalLayout from "./components/PortalLayout";
 
 function useAuth() {
@@ -69,6 +71,7 @@ function PortalApp() {
       <Routes>
         <Route path="/portal" element={<PortalLayout user={user} onLogout={logout} />}>
           <Route index element={<PortalOverview token={token} user={user} />} />
+          <Route path="tickets" element={<PortalTickets token={token} />} />
         </Route>
         <Route path="*" element={<Navigate to="/portal" />} />
       </Routes>
@@ -104,6 +107,7 @@ export default function App() {
             <Route path="uptime" element={<Uptime />} />
             <Route path="inventory" element={<Inventory />} />
             <Route path="portal-users" element={<PortalUsers />} />
+            <Route path="tickets" element={<Tickets />} />
             <Route path="chat" element={<Chat />} />
             <Route path="system" element={<System onLogout={logout} />} />
           </Route>

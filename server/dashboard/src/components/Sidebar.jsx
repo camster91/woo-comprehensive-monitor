@@ -13,6 +13,7 @@ const navItems = [
   { to: "/dashboard/uptime",   label: "Uptime",    icon: Globe },
   { to: "/dashboard/inventory", label: "Inventory", icon: Package },
   { to: "/dashboard/portal-users", label: "Portal", icon: Users },
+  { to: "/dashboard/tickets",  label: "Tickets",   icon: MessageSquare },
   { to: "/dashboard/chat",     label: "AI Chat",   icon: MessageSquare },
   { to: "/dashboard/system",   label: "System",    icon: Settings },
 ];
