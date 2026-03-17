@@ -65,10 +65,10 @@ export default function Chat() {
   const clearChat = () => { setMessages([]); setStoreData(null); setSelectedStore(""); };
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col" style={{ height: "calc(100vh - 200px)", minHeight: "500px" }}>
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col" style={{ height: "calc(100vh - 200px)", minHeight: "500px" }}>
       {/* ── Toolbar ── */}
       <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-3 flex-wrap">
-        <Bot size={16} className="text-blue-500 shrink-0" />
+        <Bot size={16} className="text-indigo-500 shrink-0" />
         <span className="text-sm font-semibold text-slate-700">AI Store Assistant</span>
 
         {/* Store selector */}
@@ -77,7 +77,7 @@ export default function Chat() {
           <select
             value={selectedStore}
             onChange={(e) => setSelectedStore(e.target.value)}
-            className="px-3 py-1.5 border border-gray-200 rounded-xl text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-200 cursor-pointer"
+            className="px-3 py-1.5 border border-gray-200 rounded-xl text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 cursor-pointer"
           >
             <option value="">All stores (no context)</option>
             {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -109,10 +109,10 @@ export default function Chat() {
         )}
         {loading && (
           <div className="flex items-start gap-3">
-            <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
-              <Bot size={14} className="text-blue-600" />
+            <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
+              <Bot size={14} className="text-indigo-600" />
             </div>
-            <div className="bg-slate-100 rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-2">
+            <div className="bg-slate-100 rounded-xl rounded-tl-sm px-4 py-3 flex items-center gap-2">
               <span className="text-xs text-slate-400">Thinking</span>
               <span className="flex gap-1">
                 {[0,1,2].map((i) => (
@@ -136,13 +136,13 @@ export default function Chat() {
             onKeyDown={handleKeyDown}
             placeholder="Ask about your stores, diagnose issues, get recommendations… (Enter to send)"
             rows={1}
-            className="flex-1 px-4 py-3 border border-gray-200 rounded-2xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-200 leading-relaxed"
+            className="flex-1 px-4 py-3 border border-gray-200 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-200 leading-relaxed"
             style={{ minHeight: "44px", maxHeight: "120px" }}
           />
           <button
             onClick={() => send()}
             disabled={loading || !input.trim()}
-            className="p-3 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+            className="p-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
           >
             <Send size={15} />
           </button>
@@ -160,14 +160,14 @@ function MessageBubble({ msg }) {
   return (
     <div className={`flex items-start gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
       {/* Avatar */}
-      <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${isUser ? "bg-blue-600" : "bg-blue-100"}`}>
-        {isUser ? <User size={13} className="text-white" /> : <Bot size={13} className="text-blue-600" />}
+      <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${isUser ? "bg-indigo-600" : "bg-indigo-100"}`}>
+        {isUser ? <User size={13} className="text-white" /> : <Bot size={13} className="text-indigo-600" />}
       </div>
 
       {/* Bubble */}
-      <div className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm leading-relaxed
+      <div className={`max-w-[82%] rounded-xl px-4 py-3 text-sm leading-relaxed
         ${isUser
-          ? "bg-blue-600 text-white rounded-tr-sm"
+          ? "bg-indigo-600 text-white rounded-tr-sm"
           : msg.error
             ? "bg-red-50 text-red-700 border border-red-200 rounded-tl-sm"
             : "bg-slate-100 text-slate-800 rounded-tl-sm"}`}
@@ -175,7 +175,7 @@ function MessageBubble({ msg }) {
         {isUser
           ? <p className="whitespace-pre-wrap">{msg.content}</p>
           : <div
-              className="prose-sm prose-code:text-blue-700"
+              className="prose-sm prose-code:text-indigo-700"
               dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
             />
         }
@@ -187,8 +187,8 @@ function MessageBubble({ msg }) {
 function EmptyState({ suggestions, onSuggest, storeData }) {
   return (
     <div className="h-full flex flex-col items-center justify-center text-center px-4 py-8">
-      <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mb-4">
-        <Sparkles size={24} className="text-blue-500" />
+      <div className="w-14 h-14 rounded-xl bg-indigo-50 flex items-center justify-center mb-4">
+        <Sparkles size={24} className="text-indigo-500" />
       </div>
       <h3 className="font-semibold text-slate-700 mb-1">AI Store Assistant</h3>
       <p className="text-sm text-slate-400 mb-6 max-w-xs">
@@ -202,7 +202,7 @@ function EmptyState({ suggestions, onSuggest, storeData }) {
           <button
             key={i}
             onClick={() => onSuggest(s)}
-            className="text-left text-xs px-4 py-3 bg-slate-50 hover:bg-blue-50 hover:text-blue-700 border border-gray-100 hover:border-blue-200 rounded-xl transition-colors text-slate-600"
+            className="text-left text-xs px-4 py-3 bg-slate-50 hover:bg-indigo-50 hover:text-indigo-700 border border-gray-100 hover:border-indigo-200 rounded-xl transition-colors text-slate-600"
           >
             {s}
           </button>

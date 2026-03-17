@@ -36,7 +36,7 @@ export default function System({ onLogout }) {
     <div className="space-y-4 animate-pulse">
       <div className="grid md:grid-cols-2 gap-4">
         {[...Array(2)].map((_, i) => (
-          <div key={i} className="bg-white rounded-2xl p-6 h-48 border border-gray-100" />
+          <div key={i} className="bg-white rounded-xl p-6 h-48 border border-gray-100" />
         ))}
       </div>
     </div>
@@ -49,7 +49,7 @@ export default function System({ onLogout }) {
     <div className="space-y-5">
       <div className="grid md:grid-cols-2 gap-5">
         {/* Server info */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
           <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2 mb-4">
             <Server size={15} className="text-slate-400" /> Server Info
           </h3>
@@ -68,7 +68,7 @@ export default function System({ onLogout }) {
               </div>
               <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                 <div
-                  className={`h-full rounded-full transition-all ${heapPct > 80 ? "bg-red-400" : heapPct > 60 ? "bg-yellow-400" : "bg-blue-400"}`}
+                  className={`h-full rounded-full transition-all ${heapPct > 80 ? "bg-red-400" : heapPct > 60 ? "bg-yellow-400" : "bg-indigo-400"}`}
                   style={{ width: `${heapPct}%` }}
                 />
               </div>
@@ -78,7 +78,7 @@ export default function System({ onLogout }) {
         </div>
 
         {/* Config */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
           <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2 mb-4">
             <Settings size={15} className="text-slate-400" /> Configuration
           </h3>
@@ -96,7 +96,7 @@ export default function System({ onLogout }) {
               <p className="text-xs text-slate-400 mb-1">Allowed emails</p>
               <div className="flex flex-wrap gap-1">
                 {config.allowed_emails.map((e) => (
-                  <span key={e} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-lg">{e}</span>
+                  <span key={e} className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-lg">{e}</span>
                 ))}
               </div>
             </div>
@@ -106,14 +106,14 @@ export default function System({ onLogout }) {
 
       {/* Plugin Download */}
       {plugin && (
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
           <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2 mb-4">
             <Package size={15} className="text-slate-400" /> WordPress Plugin
           </h3>
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-slate-700 font-medium">
-                WooCommerce Comprehensive Monitor <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-lg ml-1">v{plugin.version}</span>
+                WooCommerce Comprehensive Monitor <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-lg ml-1">v{plugin.version}</span>
               </p>
               <p className="text-xs text-slate-400 mt-1">
                 {plugin.filename}{plugin.size ? ` · ${(plugin.size / 1024).toFixed(0)} KB` : ""}
@@ -121,7 +121,7 @@ export default function System({ onLogout }) {
               </p>
             </div>
             <a href={`/api/plugin/download?authToken=${localStorage.getItem("authToken")}`}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-xl text-sm font-medium hover:bg-blue-600 transition-colors">
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-500 text-white rounded-xl text-sm font-medium hover:bg-indigo-600 transition-colors">
               <Download size={14} /> Download ZIP
             </a>
           </div>
@@ -185,7 +185,7 @@ function formatConnResults(res) {
 function InfoRow({ icon, label, value, chip, chipColor }) {
   const chipColors = {
     green: "bg-green-100 text-green-700", yellow: "bg-yellow-100 text-yellow-700",
-    red: "bg-red-100 text-red-700", gray: "bg-gray-100 text-gray-600", blue: "bg-blue-100 text-blue-700",
+    red: "bg-red-100 text-red-700", gray: "bg-gray-100 text-gray-600", blue: "bg-indigo-100 text-indigo-700",
   };
   return (
     <div className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">

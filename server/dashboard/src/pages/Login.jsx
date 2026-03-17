@@ -57,14 +57,14 @@ export default function Login({ onLogin }) {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg mb-3">
+          <div className="w-12 h-12 rounded-xl bg-indigo-600 flex items-center justify-center shadow-lg mb-3">
             <LayoutDashboard size={24} className="text-white" />
           </div>
           <h1 className="text-xl font-bold text-slate-900">WooCommerce Monitor</h1>
           <p className="text-slate-500 text-sm mt-1">Multi-store monitoring</p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
           {step === STEP.EMAIL && (
             <>
               <h2 className="text-base font-semibold text-slate-800 mb-1">Sign in</h2>
@@ -85,7 +85,7 @@ export default function Login({ onLogin }) {
                       placeholder="you@example.com"
                       required
                       className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-slate-200 text-sm
-                                 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                                 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
                                  placeholder:text-slate-400"
                     />
                   </div>
@@ -94,7 +94,7 @@ export default function Login({ onLogin }) {
                 <button
                   type="submit"
                   disabled={loading || !email}
-                  className="w-full py-2.5 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300
+                  className="w-full py-2.5 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300
                              text-white text-sm font-medium transition-colors flex items-center justify-center gap-2"
                 >
                   {loading ? <Loader2 size={15} className="animate-spin" /> : null}
@@ -127,7 +127,7 @@ export default function Login({ onLogin }) {
                       required
                       autoFocus
                       className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-slate-200 text-sm tracking-widest
-                                 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                                 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
                                  placeholder:text-slate-400"
                     />
                   </div>
@@ -136,7 +136,7 @@ export default function Login({ onLogin }) {
                 <button
                   type="submit"
                   disabled={loading || code.length !== 6}
-                  className="w-full py-2.5 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300
+                  className="w-full py-2.5 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300
                              text-white text-sm font-medium transition-colors flex items-center justify-center gap-2"
                 >
                   {loading ? <Loader2 size={15} className="animate-spin" /> : null}

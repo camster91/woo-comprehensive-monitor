@@ -23,13 +23,13 @@ export default function AlertTrendsChart({ trends }) {
       {
         label: "Total",
         data: trends.map((t) => t.total || 0),
-        borderColor: "#3b82f6",
-        backgroundColor: "rgba(59,130,246,0.08)",
+        borderColor: "#6366f1",
+        backgroundColor: "rgba(99,102,241,0.08)",
         fill: true,
         tension: 0.4,
         pointRadius: 3,
         pointHoverRadius: 6,
-        pointBackgroundColor: "#3b82f6",
+        pointBackgroundColor: "#6366f1",
         borderWidth: 2,
       },
       {

@@ -120,14 +120,14 @@ export default function Disputes() {
         </select>
         <div className="ml-auto">
           <button onClick={syncHistorical} disabled={syncing}
-            className="flex items-center gap-2 px-4 py-1.5 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 disabled:opacity-50 transition-colors">
+            className="flex items-center gap-2 px-4 py-1.5 bg-indigo-500 text-white rounded-lg text-sm font-medium hover:bg-indigo-600 disabled:opacity-50 transition-colors">
             {syncing ? <><RefreshCw size={13} className="animate-spin" /> Syncing...</> : <><RefreshCw size={13} /> Sync from Stripe</>}
           </button>
         </div>
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="hidden md:grid grid-cols-[1fr_1fr_80px_1fr_110px_100px_30px] gap-2 px-4 py-2.5 bg-slate-50 border-b text-xs font-semibold text-slate-500 uppercase tracking-wide">
           <span>Store</span><span>Customer</span><span>Amount</span><span>Reason</span><span>Status</span><span>Due By</span><span></span>
         </div>
@@ -263,7 +263,7 @@ function DisputeDetail({ d, toast, fetchDisputes, setStats }) {
             <CheckCircle size={12} /> Evidence Submitted
           </span>
         ) : isStaged ? (
-          <span className="flex items-center gap-1 text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">
+          <span className="flex items-center gap-1 text-xs font-medium text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg">
             <FileText size={12} /> Evidence Staged
           </span>
         ) : (
@@ -283,7 +283,7 @@ function DisputeDetail({ d, toast, fetchDisputes, setStats }) {
 
         {!isStaged && !isSubmitted && d.status !== "won" && d.status !== "lost" && (
           <button onClick={stageEvidence} disabled={staging}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500 text-white rounded-lg text-xs font-medium hover:bg-blue-600 disabled:opacity-50">
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500 text-white rounded-lg text-xs font-medium hover:bg-indigo-600 disabled:opacity-50">
             {staging ? <Loader size={12} className="animate-spin" /> : <FileText size={12} />}
             Stage Evidence
           </button>

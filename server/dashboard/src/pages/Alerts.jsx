@@ -107,7 +107,7 @@ export default function Alerts() {
             {data.total.toLocaleString()}
           </span>
           {activeFilters > 0 && (
-            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+            <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-medium">
               {activeFilters} filter{activeFilters > 1 ? "s" : ""}
             </span>
           )}
@@ -143,7 +143,7 @@ export default function Alerts() {
         {activeFilters > 0 && (
           <button
             onClick={() => setFilters({ storeId: "", severity: "", type: "" })}
-            className="text-xs text-blue-600 hover:underline"
+            className="text-xs text-indigo-600 hover:underline"
           >
             Clear filters
           </button>
@@ -171,7 +171,7 @@ export default function Alerts() {
                 <button
                   onClick={() => loadAlerts(offset + PAGE_SIZE)}
                   disabled={loading}
-                  className="w-full py-3 text-sm text-blue-600 hover:text-blue-800 border border-blue-200 rounded-xl hover:bg-blue-50 transition-colors disabled:opacity-50"
+                  className="w-full py-3 text-sm text-indigo-600 hover:text-indigo-800 border border-indigo-200 rounded-xl hover:bg-indigo-50 transition-colors disabled:opacity-50"
                 >
                   {loading ? "Loading..." : `Load more (${data.total - data.alerts.length} remaining)`}
                 </button>
@@ -245,7 +245,7 @@ function FilterSelect({ value, onChange, placeholder, options }) {
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white text-slate-700 hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-200 cursor-pointer"
+      className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white text-slate-700 hover:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 cursor-pointer"
     >
       <option value="">{placeholder}</option>
       {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}

@@ -22,7 +22,7 @@ export default function Stores() {
   if (loading) return (
     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
       {[...Array(6)].map((_, i) => (
-        <div key={i} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm animate-pulse h-36">
+        <div key={i} className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm animate-pulse h-36">
           <div className="h-4 bg-gray-200 rounded w-1/2 mb-2" />
           <div className="h-3 bg-gray-100 rounded w-3/4 mb-4" />
           <div className="h-3 bg-gray-100 rounded w-1/3" />
@@ -40,7 +40,7 @@ export default function Stores() {
         </h2>
         <button
           onClick={() => setShowAdd(true)}
-          className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
+          className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors shadow-sm"
         >
           <Plus size={15} /> Add Store
         </button>
@@ -83,11 +83,11 @@ function StoreCard({ store, onClick }) {
   return (
     <div
       onClick={onClick}
-      className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md hover:border-blue-200 cursor-pointer transition-all group"
+      className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm hover:shadow-md hover:border-indigo-200 cursor-pointer transition-all group"
     >
       {/* Top: name + status dot */}
       <div className="flex justify-between items-start mb-1">
-        <h3 className="font-semibold text-slate-800 group-hover:text-blue-700 transition-colors leading-tight">
+        <h3 className="font-semibold text-slate-800 group-hover:text-indigo-700 transition-colors leading-tight">
           {store.name}
         </h3>
         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${config.bg} ${config.text}`}>
@@ -111,12 +111,12 @@ function StoreCard({ store, onClick }) {
         </span>
         <div className="flex items-center gap-2">
           {store.hasApiCredentials && (
-            <span className="bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded text-[10px]">API</span>
+            <span className="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded text-[10px]">API</span>
           )}
           {store.plugin_version && (
             <span className="text-slate-300">v{store.plugin_version}</span>
           )}
-          <ChevronRight size={12} className="text-slate-300 group-hover:text-blue-400 transition-colors" />
+          <ChevronRight size={12} className="text-slate-300 group-hover:text-indigo-400 transition-colors" />
         </div>
       </div>
     </div>
@@ -130,7 +130,7 @@ function EmptyState({ onAdd }) {
       <p className="font-medium text-slate-500">No stores yet</p>
       <p className="text-sm mt-1 mb-4">Add your first WooCommerce store to start monitoring.</p>
       <button onClick={onAdd}
-        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700">
+        className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700">
         <Plus size={14} /> Add Store
       </button>
     </div>
@@ -157,28 +157,28 @@ function AddStoreModal({ onClose, onSuccess }) {
         <Field label="Store Name" required>
           <input placeholder="My WooCommerce Store" required value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200" />
         </Field>
         <Field label="Store URL" required>
           <input placeholder="https://example.com" required value={form.url}
             onChange={(e) => setForm({ ...form, url: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200" />
         </Field>
         <Field label="Consumer Key" hint="Optional — for server-side health checks">
           <input placeholder="ck_..." value={form.consumerKey}
             onChange={(e) => setForm({ ...form, consumerKey: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200" />
         </Field>
         <Field label="Consumer Secret">
           <input type="password" placeholder="cs_..." value={form.consumerSecret}
             onChange={(e) => setForm({ ...form, consumerSecret: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200" />
         </Field>
         {error && <p className="text-red-600 text-sm bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
         <div className="flex gap-2 justify-end pt-2">
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 rounded-xl hover:bg-slate-100">Cancel</button>
           <button type="submit" disabled={saving}
-            className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors">
+            className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors">
             {saving ? "Adding…" : "Add Store"}
           </button>
         </div>
@@ -298,20 +298,20 @@ function StoreDetailModal({ storeId, onClose, onUpdate, toast }) {
 
       {tab === "credentials" && (
         <div className="space-y-3">
-          <p className="text-sm text-slate-500 bg-blue-50 px-3 py-2 rounded-xl">
+          <p className="text-sm text-slate-500 bg-indigo-50 px-3 py-2 rounded-xl">
             Consumer key and secret are used for server-side WooCommerce API health checks.
             Generate them in WooCommerce → Settings → Advanced → REST API.
           </p>
           <p className="text-xs text-slate-400">Current: {store.consumer_key || "Not set"}</p>
           <input placeholder="ck_..." value={creds.consumerKey}
             onChange={(e) => setCreds({ ...creds, consumerKey: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200" />
           <input type="password" placeholder="cs_..." value={creds.consumerSecret}
             onChange={(e) => setCreds({ ...creds, consumerSecret: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200" />
           <div className="flex gap-2">
             <button onClick={saveCreds}
-              className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm hover:bg-blue-700 transition-colors">Save</button>
+              className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm hover:bg-indigo-700 transition-colors">Save</button>
             <button onClick={clearCreds}
               className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-sm hover:bg-slate-200 transition-colors">Clear</button>
           </div>
@@ -332,7 +332,7 @@ function Modal({ title, subtitle, children, onClose, wide }) {
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`bg-white rounded-2xl shadow-2xl w-full max-h-[85vh] overflow-y-auto ${wide ? "max-w-lg" : "max-w-md"}`}
+        className={`bg-white rounded-xl shadow-2xl w-full max-h-[85vh] overflow-y-auto ${wide ? "max-w-lg" : "max-w-md"}`}
       >
         <div className="sticky top-0 bg-white px-6 pt-5 pb-4 border-b border-gray-100 flex justify-between items-start">
           <div>
