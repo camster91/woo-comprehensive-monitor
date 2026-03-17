@@ -1,30 +1,22 @@
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Outlet } from "react-router-dom";
 import { useEffect, useState, useCallback } from "react";
 import { api, apiPost } from "../api/client";
-import {
-  LayoutDashboard, Store, Bell, Shield, MessageSquare, Settings,
-  RefreshCw, WifiOff, Menu, X, LogOut,
-} from "lucide-react";
-
-const tabs = [
-  { to: "/dashboard",           label: "Overview",  icon: LayoutDashboard, end: true },
-  { to: "/dashboard/stores",    label: "Stores",    icon: Store },
-  { to: "/dashboard/alerts",    label: "Alerts",    icon: Bell },
-  { to: "/dashboard/disputes",  label: "Disputes",  icon: Shield },
-  { to: "/dashboard/chat",      label: "AI Chat",   icon: MessageSquare },
-  { to: "/dashboard/system",    label: "System",    icon: Settings },
-];
+import { RefreshCw, WifiOff, Menu, X } from "lucide-react";
+import Sidebar from "./Sidebar";
 
 export default function Layout({ onLogout }) {
   const [overview, setOverview] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [secondsAgo, setSecondsAgo] = useState(0);
   const [online, setOnline] = useState(true);
+  const [collapsed, setCollapsed] = useState(() => {
+    const saved = localStorage.getItem("sidebar-collapsed");
+    return saved === "true";
+  });
   const [mobileOpen, setMobileOpen] = useState(false);
-  const navigate = useNavigate();
 
   async function handleLogout() {
-    try { await apiPost("/api/auth/logout", {}); } catch (_) { /* ignore */ }
+    try { await apiPost("/api/auth/logout", {}); } catch (_) {}
     onLogout?.();
   }
 
@@ -34,10 +26,8 @@ export default function Layout({ onLogout }) {
       .catch(() => setOnline(false));
   }, []);
 
-  // Initial load + 60s auto-refresh
   useEffect(() => { refresh(); const t = setInterval(refresh, 60000); return () => clearInterval(t); }, [refresh]);
 
-  // Tick "X seconds ago" counter
   useEffect(() => {
     const t = setInterval(() => {
       if (lastUpdated) setSecondsAgo(Math.round((Date.now() - lastUpdated) / 1000));
@@ -45,124 +35,79 @@ export default function Layout({ onLogout }) {
     return () => clearInterval(t);
   }, [lastUpdated]);
 
-  // Tab title — show critical count
   useEffect(() => {
     const crit = overview?.criticalAlerts || 0;
     document.title = crit > 0 ? `(${crit}) WooCommerce Monitor` : "WooCommerce Monitor";
   }, [overview?.criticalAlerts]);
 
-  const critCount   = overview?.criticalAlerts || 0;
-  const highCount   = overview?.highAlerts || 0;
-  const badgeCount  = critCount + highCount;
+  function toggleCollapse() {
+    const next = !collapsed;
+    setCollapsed(next);
+    localStorage.setItem("sidebar-collapsed", String(next));
+  }
+
+  const badgeCount = (overview?.criticalAlerts || 0) + (overview?.highAlerts || 0);
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
-      {/* ── Header ── */}
-      <header className="bg-gradient-to-r from-slate-900 to-slate-700 text-white shadow-lg z-20 relative">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="flex items-center justify-between h-14">
-            {/* Logo */}
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center shadow-sm">
-                <LayoutDashboard size={16} className="text-white" />
-              </div>
-              <div>
-                <h1 className="text-sm font-bold leading-tight">WooCommerce Monitor</h1>
-                <p className="text-white/50 text-[10px] leading-tight hidden sm:block">
-                  Multi-store monitoring
-                </p>
-              </div>
-            </div>
+    <div className="min-h-screen bg-slate-50">
+      {/* Desktop sidebar */}
+      <div className="hidden sm:block">
+        <Sidebar
+          collapsed={collapsed}
+          onToggle={toggleCollapse}
+          onLogout={handleLogout}
+          badgeCount={badgeCount}
+        />
+      </div>
 
-            {/* Right side: live indicator + refresh */}
-            <div className="flex items-center gap-3">
-              {/* Online/offline */}
-              <div className={`flex items-center gap-1.5 text-xs ${online ? "text-green-400" : "text-red-400"}`}>
-                {online
-                  ? <><span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                      <span className="hidden sm:inline">
-                        {secondsAgo < 10 ? "Live" : `${secondsAgo}s ago`}
-                      </span></>
-                  : <><WifiOff size={12} /><span>Offline</span></>
-                }
-              </div>
-
-              {/* Refresh button */}
-              <button onClick={refresh}
-                className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/70 hover:text-white"
-                title="Refresh now">
-                <RefreshCw size={14} />
-              </button>
-
-              {/* Logout button */}
-              <button onClick={handleLogout}
-                className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/70 hover:text-white hidden sm:flex items-center"
-                title="Sign out">
-                <LogOut size={14} />
-              </button>
-
-              {/* Mobile hamburger */}
-              <button className="sm:hidden p-1.5 hover:bg-white/10 rounded-lg" onClick={() => setMobileOpen(!mobileOpen)}>
-                {mobileOpen ? <X size={18} /> : <Menu size={18} />}
-              </button>
-            </div>
+      {/* Mobile overlay sidebar */}
+      {mobileOpen && (
+        <>
+          <div className="fixed inset-0 bg-black/30 z-20 sm:hidden" onClick={() => setMobileOpen(false)} />
+          <div className="fixed left-0 top-0 h-full z-30 sm:hidden">
+            <Sidebar
+              collapsed={false}
+              onToggle={() => setMobileOpen(false)}
+              onLogout={handleLogout}
+              badgeCount={badgeCount}
+            />
           </div>
-
-          {/* ── Desktop nav ── */}
-          <nav className="hidden sm:flex gap-1 pb-1">
-            {tabs.map((t) => (
-              <TabLink key={t.to} tab={t} badge={t.label === "Alerts" ? badgeCount : 0} />
-            ))}
-          </nav>
-        </div>
-
-        {/* ── Mobile nav (dropdown) ── */}
-        {mobileOpen && (
-          <div className="sm:hidden border-t border-white/10 px-4 py-2 flex flex-col gap-1">
-            {tabs.map((t) => (
-              <TabLink
-                key={t.to} tab={t}
-                badge={t.label === "Alerts" ? badgeCount : 0}
-                mobile
-                onClick={() => setMobileOpen(false)}
-              />
-            ))}
-          </div>
-        )}
-      </header>
-
-      {/* ── Main content ── */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
-        <Outlet context={{ overview, refresh }} />
-      </main>
-    </div>
-  );
-}
-
-function TabLink({ tab, badge, mobile, onClick }) {
-  const Icon = tab.icon;
-  return (
-    <NavLink
-      to={tab.to}
-      end={tab.end}
-      onClick={onClick}
-      className={({ isActive }) =>
-        mobile
-          ? `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
-             ${isActive ? "bg-white/15 text-white" : "text-white/70 hover:bg-white/10 hover:text-white"}`
-          : `flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-t-lg transition-colors relative
-             ${isActive
-               ? "bg-white/15 text-white after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-400"
-               : "text-white/65 hover:bg-white/10 hover:text-white"}`
-      }
-    >
-      <Icon size={15} />
-      <span>{tab.label}</span>
-      {badge > 0 && (
-        <span className="min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full bg-red-500 text-white flex items-center justify-center">
-          {badge > 99 ? "99+" : badge}
-        </span>
+        </>
       )}
-    </NavLink>
+
+      {/* Main content area */}
+      <div className={`transition-all duration-200 ${collapsed ? "sm:ml-[60px]" : "sm:ml-[200px]"}`}>
+        <header className="sticky top-0 bg-white/80 backdrop-blur-sm border-b border-gray-100 z-10 h-14 flex items-center justify-between px-4 sm:px-6">
+          <button className="sm:hidden p-1.5 hover:bg-slate-100 rounded-lg" onClick={() => setMobileOpen(!mobileOpen)}>
+            {mobileOpen ? <X size={18} /> : <Menu size={18} className="text-slate-600" />}
+          </button>
+
+          <div className="hidden sm:block" />
+
+          <div className="flex items-center gap-3">
+            <div className={`flex items-center gap-1.5 text-xs ${online ? "text-emerald-500" : "text-red-400"}`}>
+              {online
+                ? <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>{secondsAgo < 10 ? "Live" : `${secondsAgo}s ago`}</span>
+                  </>
+                : <><WifiOff size={12} /><span>Offline</span></>
+              }
+            </div>
+            <button
+              onClick={refresh}
+              className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-600"
+              title="Refresh now"
+            >
+              <RefreshCw size={14} />
+            </button>
+          </div>
+        </header>
+
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+          <Outlet context={{ overview, refresh }} />
+        </main>
+      </div>
+    </div>
   );
 }
