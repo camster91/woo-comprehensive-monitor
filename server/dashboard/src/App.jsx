@@ -16,8 +16,13 @@ import Inventory from "./pages/Inventory";
 import Manage from "./pages/Manage";
 import PortalUsers from "./pages/PortalUsers";
 import Tickets from "./pages/Tickets";
+import Insights from "./pages/Insights";
+import Settings from "./pages/Settings";
 import PortalOverview from "./pages/portal/PortalOverview";
 import PortalTickets from "./pages/portal/PortalTickets";
+import PortalRevenue from "./pages/portal/PortalRevenue";
+import PortalOrders from "./pages/portal/PortalOrders";
+import PortalAlerts from "./pages/portal/PortalAlerts";
 
 export default function App() {
   const [role, setRole] = useState(() => localStorage.getItem("role") || null); // "admin" or "client"
@@ -96,15 +101,18 @@ export default function App() {
     );
   }
 
-  // Client role — simple portal view
+  // Client role — portal view with expanded pages
   if (role === "client") {
     return (
       <ToastProvider>
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<PortalLayout user={user} onLogout={logout} />}>
+            <Route path="/" element={<PortalLayout user={user} onLogout={logout} token={token} />}>
               <Route index element={<PortalOverview token={token} user={user} />} />
               <Route path="tickets" element={<PortalTickets token={token} />} />
+              <Route path="revenue" element={<PortalRevenue token={token} />} />
+              <Route path="orders" element={<PortalOrders token={token} />} />
+              <Route path="alerts" element={<PortalAlerts token={token} />} />
             </Route>
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
@@ -129,7 +137,9 @@ export default function App() {
             <Route path="manage" element={<Manage />} />
             <Route path="portal-users" element={<PortalUsers />} />
             <Route path="tickets" element={<Tickets />} />
+            <Route path="insights" element={<Insights />} />
             <Route path="chat" element={<Chat />} />
+            <Route path="settings" element={<Settings />} />
             <Route path="system" element={<System onLogout={logout} />} />
           </Route>
           <Route path="*" element={<Navigate to="/" />} />

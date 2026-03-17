@@ -3,7 +3,7 @@ const axios = require("axios");
 const pLimit = require("p-limit");
 const { run, get, all } = require("../db");
 const storeService = require("./store-service");
-const { createAlert } = require("./alert-service");
+const { createAlert, queueAlertEmail } = require("./alert-service");
 
 let _checkRunning = false;
 
@@ -82,6 +82,12 @@ async function checkAllStores() {
             storeId: store.id, severity: "critical", type: "uptime",
             dedupKey: `down_${store.id}`,
           });
+          // V2: Email admin for downtime
+          queueAlertEmail(
+            `SITE DOWN: ${store.name}`,
+            `${store.url} returned status ${check.status_code}.\nResponse time: ${check.response_time_ms}ms\n\nCheck: ${process.env.APP_FQDN || "https://app.influencerslink.com"}/uptime`,
+            store.id, "uptime"
+          );
         }
         if (check.ssl_days_remaining !== null && check.ssl_days_remaining < 14) {
           createAlert({

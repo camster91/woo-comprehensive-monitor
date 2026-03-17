@@ -12,6 +12,24 @@
 const { run, get, all, insert } = require("../db");
 const axios = require("axios");
 
+// Lazy-load to avoid circular dependencies
+let _notificationService = null;
+let _activityService = null;
+let _webhookService = null;
+
+function getNotificationService() {
+  if (!_notificationService) _notificationService = require("./notification-service");
+  return _notificationService;
+}
+function getActivityService() {
+  if (!_activityService) _activityService = require("./activity-service");
+  return _activityService;
+}
+function getWebhookService() {
+  if (!_webhookService) _webhookService = require("./webhook-service");
+  return _webhookService;
+}
+
 // ---------------------------------------------------------------------------
 // Alert dedup — prevents the same error flooding the alerts table.
 //
@@ -86,11 +104,24 @@ function shouldSuppressEmail(storeId, type) {
 // CRUD
 // ---------------------------------------------------------------------------
 function createAlert({ subject, message, storeId = null, severity = "medium", type = null, dedupKey = null }) {
-  return insert(
+  const id = insert(
     `INSERT INTO alerts (store_id, subject, message, severity, type, dedup_key, timestamp)
      VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
     [storeId, subject, message, severity, type, dedupKey]
   );
+
+  // V2: Log activity for significant alerts
+  try {
+    if (severity === "critical" || severity === "high") {
+      getActivityService().logActivity({
+        storeId, eventType: "alert", title: subject, detail: message, severity,
+      });
+      getNotificationService().notifyAdmin(subject, message, severity === "critical" ? "error" : "warning", "/alerts");
+      getWebhookService().fireWebhooks("alert", { title: subject, message, severity }).catch(() => {});
+    }
+  } catch (_) {}
+
+  return id;
 }
 
 function getAlerts({ storeId, severity, type, olderThan, limit = 100, offset = 0 } = {}) {

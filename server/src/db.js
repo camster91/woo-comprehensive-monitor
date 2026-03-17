@@ -63,6 +63,7 @@ function initDB(dbPath) {
     { version: "007", file: "007_portal_users.sql" },
     { version: "008", file: "008_product_snapshots.sql" },
     { version: "009", file: "009_tickets.sql" },
+    { version: "010", file: "010_v2_features.sql" },
   ];
 
   // schema_migrations table is created by 002 itself, but we need it first

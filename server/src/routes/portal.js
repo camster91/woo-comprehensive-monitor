@@ -7,6 +7,8 @@ const alertService = require("../services/alert-service");
 const storeService = require("../services/store-service");
 const ticketService = require("../services/ticket-service");
 
+const notificationService = require("../services/notification-service");
+
 const router = Router();
 
 // Public: request magic code
@@ -77,7 +79,9 @@ router.get("/portal/dashboard", portalAuthMiddleware, (req, res) => {
 router.get("/portal/revenue", portalAuthMiddleware, (req, res) => {
   const period = req.query.period || "7d";
   const summary = revenueService.getRevenueSummary(period, req.portalUser.store_id);
-  res.json({ status: "ok", ...summary });
+  const days = period === "today" ? 1 : period === "30d" ? 30 : period === "90d" ? 90 : 7;
+  const timeline = revenueService.getRevenueTimeline(days, req.portalUser.store_id);
+  res.json({ status: "ok", ...summary, timeline });
 });
 
 router.get("/portal/disputes", portalAuthMiddleware, (req, res) => {
@@ -127,6 +131,32 @@ router.get("/portal/tickets/:id", portalAuthMiddleware, (req, res) => {
   if (!ticket) return res.status(404).json({ error: "Ticket not found" });
   if (ticket.store_id !== req.portalUser.store_id) return res.status(403).json({ error: "Not your ticket" });
   res.json(ticket);
+});
+
+// Portal: get notifications
+router.get("/portal/notifications", portalAuthMiddleware, (req, res) => {
+  const result = notificationService.getNotifications({
+    userType: "client",
+    userId: req.portalUser.id,
+    unreadOnly: req.query.unreadOnly === "true",
+    limit: parseInt(req.query.limit) || 50,
+  });
+  res.json(result);
+});
+
+router.get("/portal/notifications/count", portalAuthMiddleware, (req, res) => {
+  const count = notificationService.getUnreadCount({ userType: "client", userId: req.portalUser.id });
+  res.json({ unread: count });
+});
+
+router.post("/portal/notifications/:id/read", portalAuthMiddleware, (req, res) => {
+  notificationService.markRead(parseInt(req.params.id));
+  res.json({ status: "ok" });
+});
+
+router.post("/portal/notifications/read-all", portalAuthMiddleware, (req, res) => {
+  notificationService.markAllRead({ userType: "client", userId: req.portalUser.id });
+  res.json({ status: "ok" });
 });
 
 // Admin routes for managing portal users (uses existing admin auth)

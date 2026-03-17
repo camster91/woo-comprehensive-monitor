@@ -84,6 +84,15 @@ async function start() {
           );
           clearAutoSubmit(dispute.id);
           console.log(`[AutoSubmit] Submitted evidence for ${dispute.stripe_dispute_id}`);
+          // V2: Notify + log
+          try {
+            const { notifyAdmin } = require("./services/notification-service");
+            const { logActivity } = require("./services/activity-service");
+            const { queueAlertEmail } = require("./services/alert-service");
+            notifyAdmin(`Evidence submitted: ${dispute.stripe_dispute_id}`, `Auto-submitted for ${dispute.store_name}`, "success", "/disputes");
+            logActivity({ storeId: dispute.store_id, eventType: "dispute", title: `Evidence auto-submitted: ${dispute.stripe_dispute_id}`, severity: "success" });
+            queueAlertEmail(`Evidence Auto-Submitted: ${dispute.stripe_dispute_id}`, `Dispute evidence was auto-submitted for ${dispute.store_name}.\n\nDispute: ${dispute.stripe_dispute_id}`, dispute.store_id, "dispute");
+          } catch (_) {}
         } catch (err) {
           console.error(`[AutoSubmit] Failed ${dispute.stripe_dispute_id}: ${err.message}`);
           createAlert({
@@ -142,6 +151,20 @@ async function start() {
       dbRun("DELETE FROM alerts WHERE id IN (SELECT id FROM alerts ORDER BY timestamp ASC LIMIT ?)", [count.c - 10000]);
       console.log(`[Alerts] Hard cap: trimmed ${count.c - 10000} oldest rows to stay under 10,000`);
     }
+  });
+
+  // Weekly digest — every Monday at 9am
+  const { sendWeeklyDigests } = require("./services/digest-service");
+  cron.schedule("0 9 * * 1", () => {
+    sendWeeklyDigests().catch(e => console.error("[Digest]", e.message));
+  });
+
+  // Prune old notifications and activity log — daily at 3:30am
+  const { deleteOldNotifications } = require("./services/notification-service");
+  const { pruneActivity } = require("./services/activity-service");
+  cron.schedule("30 3 * * *", () => {
+    deleteOldNotifications(30);
+    pruneActivity(30);
   });
 
   // Daily SQLite backup at 2am — keeps 7 rolling daily copies in /data/backups/

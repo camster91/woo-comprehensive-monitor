@@ -17,6 +17,7 @@ export default function Manage() {
   const [storeThemes, setStoreThemes] = useState({});
   const [updating, setUpdating] = useState({});
   const [bulkUpdating, setBulkUpdating] = useState(false);
+  const [selected, setSelected] = useState(new Set());
 
   const fetchSummary = () => {
     setLoading(true);
@@ -109,6 +110,39 @@ export default function Manage() {
     setBulkUpdating(false);
   };
 
+  const toggleSelect = (storeId) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(storeId)) next.delete(storeId); else next.add(storeId);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    if (!summary?.stores) return;
+    const withUpdates = summary.stores.filter(s => (s.plugin_updates || 0) + (s.theme_updates || 0) > 0);
+    if (selected.size === withUpdates.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(withUpdates.map(s => s.store_id)));
+    }
+  };
+
+  const bulkUpdateSelected = async () => {
+    if (selected.size === 0) return;
+    if (!confirm(`Update all plugins on ${selected.size} selected store${selected.size > 1 ? "s" : ""}?`)) return;
+    setBulkUpdating(true);
+    try {
+      for (const storeId of selected) {
+        await apiPost(`/api/manage/${storeId}/plugins/update-all`).catch(() => {});
+      }
+      setStorePlugins({});
+      setSelected(new Set());
+      fetchSummary();
+    } catch (err) { console.error(err); }
+    setBulkUpdating(false);
+  };
+
   if (loading) return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">{[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}</div>
@@ -124,7 +158,13 @@ export default function Manage() {
             className="flex items-center gap-2 px-3 py-1.5 border border-slate-200 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors">
             <RefreshCw size={13} /> Refresh
           </button>
-          {summary && summary.totalPluginUpdates > 0 && (
+          {selected.size > 0 && (
+            <button onClick={bulkUpdateSelected} disabled={bulkUpdating}
+              className="flex items-center gap-2 px-4 py-1.5 bg-indigo-500 text-white rounded-lg text-sm font-medium hover:bg-indigo-600 disabled:opacity-50 transition-colors">
+              {bulkUpdating ? <><Loader size={13} className="animate-spin" /> Updating...</> : <><Download size={13} /> Update {selected.size} Selected</>}
+            </button>
+          )}
+          {summary && summary.totalPluginUpdates > 0 && selected.size === 0 && (
             <button onClick={bulkUpdateAll} disabled={bulkUpdating}
               className="flex items-center gap-2 px-4 py-1.5 bg-indigo-500 text-white rounded-lg text-sm font-medium hover:bg-indigo-600 disabled:opacity-50 transition-colors">
               {bulkUpdating ? <><Loader size={13} className="animate-spin" /> Updating All...</> : <><Download size={13} /> Update All Stores</>}
@@ -148,6 +188,17 @@ export default function Manage() {
       )}
 
       {/* Store list */}
+      {summary?.stores?.some(s => (s.plugin_updates || 0) + (s.theme_updates || 0) > 0) && (
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer hover:text-slate-700">
+            <input type="checkbox" onChange={selectAll}
+              checked={selected.size > 0 && selected.size === summary?.stores?.filter(s => (s.plugin_updates || 0) + (s.theme_updates || 0) > 0).length}
+              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+            Select all with updates
+          </label>
+          {selected.size > 0 && <span className="text-xs text-indigo-600 font-medium">{selected.size} selected</span>}
+        </div>
+      )}
       <div className="space-y-3">
         {summary?.stores?.map(store => {
           const isOpen = expanded === store.store_id;
@@ -159,8 +210,13 @@ export default function Manage() {
 
           return (
             <div key={store.store_id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-              <button onClick={() => toggleStore(store.store_id)}
-                className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-slate-50 transition-colors">
+              <div className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-slate-50 transition-colors">
+                {hasUpdates > 0 && (
+                  <input type="checkbox" checked={selected.has(store.store_id)}
+                    onChange={(e) => { e.stopPropagation(); toggleSelect(store.store_id); }}
+                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 shrink-0" />
+                )}
+                <button onClick={() => toggleStore(store.store_id)} className="flex items-center gap-3 flex-1 min-w-0">
                 <span className="text-slate-400">{isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-slate-800">{store.store_name}</p>
@@ -173,7 +229,7 @@ export default function Manage() {
                 ) : (
                   <span className="text-xs font-medium px-2 py-0.5 rounded-lg bg-green-50 text-green-700">Up to date</span>
                 )}
-              </button>
+              </button></div>
 
               {isOpen && (
                 <div className="px-5 pb-4 border-t border-gray-50 space-y-4">

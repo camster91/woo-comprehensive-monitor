@@ -3,6 +3,9 @@ import { useEffect, useState, useCallback } from "react";
 import { api, apiPost } from "../api/client";
 import { RefreshCw, WifiOff, Menu, X } from "lucide-react";
 import Sidebar from "./Sidebar";
+import SearchBar from "./SearchBar";
+import NotificationBell from "./NotificationBell";
+import DarkModeToggle from "./DarkModeToggle";
 
 export default function Layout({ onLogout }) {
   const [overview, setOverview] = useState(null);
@@ -49,7 +52,7 @@ export default function Layout({ onLogout }) {
   const badgeCount = (overview?.criticalAlerts || 0) + (overview?.highAlerts || 0);
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       {/* Desktop sidebar */}
       <div className="hidden sm:block">
         <Sidebar
@@ -77,14 +80,16 @@ export default function Layout({ onLogout }) {
 
       {/* Main content area */}
       <div className={`transition-all duration-200 ${collapsed ? "sm:ml-[60px]" : "sm:ml-[200px]"}`}>
-        <header className="sticky top-0 bg-white/80 backdrop-blur-sm border-b border-gray-100 z-10 h-14 flex items-center justify-between px-4 sm:px-6">
+        <header className="sticky top-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-b border-gray-100 dark:border-slate-700 z-10 h-14 flex items-center justify-between px-4 sm:px-6">
           <button className="sm:hidden p-2 hover:bg-slate-100 rounded-lg" onClick={() => setMobileOpen(!mobileOpen)}>
             {mobileOpen ? <X size={18} /> : <Menu size={18} className="text-slate-600" />}
           </button>
 
-          <div className="hidden sm:block" />
+          <div className="hidden sm:block">
+            <SearchBar />
+          </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <div className={`flex items-center gap-1.5 text-xs ${online ? "text-emerald-500" : "text-red-400"}`}>
               {online
                 ? <>
@@ -94,9 +99,11 @@ export default function Layout({ onLogout }) {
                 : <><WifiOff size={12} /><span>Offline</span></>
               }
             </div>
+            <DarkModeToggle />
+            <NotificationBell />
             <button
               onClick={refresh}
-              className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-600"
+              className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-400 hover:text-slate-600"
               title="Refresh now"
             >
               <RefreshCw size={14} />

@@ -1,10 +1,27 @@
 const { run, get, all, insert } = require("../db");
+const { sendEmail } = require("./email-service");
+const notificationService = require("./notification-service");
+const activityService = require("./activity-service");
 
 function createTicket({ storeId, portalUserId, subject, message, priority }) {
-  return insert(
+  const id = insert(
     "INSERT INTO tickets (store_id, portal_user_id, subject, message, priority) VALUES (?, ?, ?, ?, ?)",
     [storeId, portalUserId || null, subject, message, priority || "normal"]
   );
+
+  // V2: Notify admin + log activity
+  try {
+    notificationService.notifyAdmin(`New ticket: ${subject}`, message, "info", "/tickets");
+    activityService.logActivity({ storeId, eventType: "ticket", title: `New ticket: ${subject}`, detail: message, severity: "info" });
+
+    // Email admin
+    const adminEmail = process.env.ALERT_EMAIL;
+    if (adminEmail) {
+      sendEmail({ to: adminEmail, subject: `New Ticket: ${subject}`, text: `A new support ticket was submitted:\n\n${message}\n\nPriority: ${priority || "normal"}` }).catch(() => {});
+    }
+  } catch (_) {}
+
+  return id;
 }
 
 function getTickets({ storeId, status, limit = 50, offset = 0 } = {}) {
@@ -43,6 +60,33 @@ function replyToTicket(id, adminReply) {
     "UPDATE tickets SET admin_reply = ?, replied_at = datetime('now'), status = 'replied', updated_at = datetime('now') WHERE id = ?",
     [adminReply, id]
   );
+
+  // V2: Email client when admin replies
+  try {
+    const ticket = get(
+      `SELECT t.*, pu.email as user_email, pu.name as user_name, pu.id as portal_user_id, s.name as store_name
+       FROM tickets t
+       LEFT JOIN portal_users pu ON t.portal_user_id = pu.id
+       LEFT JOIN stores s ON t.store_id = s.id
+       WHERE t.id = ?`,
+      [id]
+    );
+    if (ticket && ticket.user_email) {
+      sendEmail({
+        to: ticket.user_email,
+        subject: `Re: ${ticket.subject}`,
+        text: `Hi ${ticket.user_name || ""},\n\nWe've replied to your ticket:\n\n${adminReply}\n\n— Influencers Link Support`,
+      }).catch(() => {});
+
+      // Notify client in-app
+      notificationService.notifyClient(ticket.portal_user_id, `Reply to: ${ticket.subject}`, adminReply, "success", "/tickets");
+    }
+
+    activityService.logActivity({
+      storeId: ticket?.store_id, eventType: "ticket",
+      title: `Ticket replied: ${ticket?.subject || id}`, severity: "success",
+    });
+  } catch (_) {}
 }
 
 function updateTicketStatus(id, status) {
