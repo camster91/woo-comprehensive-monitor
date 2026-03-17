@@ -9,3 +9,4 @@ check-braces.php
 exclude.txt
 server/data/*.db
 .worktrees/
+.superpowers/
