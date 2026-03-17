@@ -57,6 +57,7 @@ function initDB(dbPath) {
   const versionedMigrations = [
     { version: "002", file: "002_dedup_key.sql" },
     { version: "003", file: "003_disputes_table.sql" },
+    { version: "004", file: "004_revenue_snapshots.sql" },
   ];
 
   // schema_migrations table is created by 002 itself, but we need it first
