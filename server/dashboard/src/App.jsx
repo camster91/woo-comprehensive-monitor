@@ -12,6 +12,7 @@ import Login from "./pages/Login";
 import Revenue from "./pages/Revenue";
 import Uptime from "./pages/Uptime";
 import Inventory from "./pages/Inventory";
+import Manage from "./pages/Manage";
 import PortalUsers from "./pages/PortalUsers";
 import Tickets from "./pages/Tickets";
 import PortalLogin from "./pages/portal/PortalLogin";
@@ -106,6 +107,7 @@ export default function App() {
             <Route path="disputes" element={<Disputes />} />
             <Route path="uptime" element={<Uptime />} />
             <Route path="inventory" element={<Inventory />} />
+            <Route path="manage" element={<Manage />} />
             <Route path="portal-users" element={<PortalUsers />} />
             <Route path="tickets" element={<Tickets />} />
             <Route path="chat" element={<Chat />} />
