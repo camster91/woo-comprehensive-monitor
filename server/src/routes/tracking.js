@@ -22,6 +22,7 @@ const VALID_TYPES = new Set([
   "checkout_error",
   "ajax_add_to_cart_error",
   "cart_abandonment_stats",
+  "support_ticket",
 ]);
 
 router.post("/track-woo-error", async (req, res) => {
@@ -267,6 +268,35 @@ router.post("/track-woo-error", async (req, res) => {
         );
       }
       return res.json({ success: true });
+    }
+
+    // --- Support ticket from chat widget ---
+    if (type === "support_ticket") {
+      const ticketService = require("../services/ticket-service");
+      // Find or create a portal user for this customer
+      const { get: dbGet } = require("../db");
+      let portalUserId = null;
+      const portalUser = dbGet("SELECT id FROM portal_users WHERE email = ?", [req.body.customer_email]);
+      if (portalUser) portalUserId = portalUser.id;
+
+      const ticketId = ticketService.createTicket({
+        storeId: storeId,
+        portalUserId: portalUserId,
+        subject: req.body.subject || "Support Request",
+        message: req.body.message || req.body.error_message || "No message",
+        priority: req.body.priority || "normal",
+      });
+
+      // Also create an alert so admin sees it
+      createAlert({
+        subject: `Support Ticket: ${req.body.customer_name || "Customer"} on ${req.body.store_name || "Unknown"}`,
+        message: `${req.body.customer_name} (${req.body.customer_email}): ${req.body.subject}`,
+        storeId: storeId,
+        severity: "medium",
+        type: "ticket",
+      });
+
+      return res.json({ success: true, ticket_id: ticketId });
     }
 
     // --- Regular frontend errors ---
