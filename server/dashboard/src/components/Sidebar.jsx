@@ -1,7 +1,7 @@
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard, DollarSign, Store, Bell, Shield,
-  MessageSquare, Settings, PanelLeftClose, PanelLeft, LogOut,
+  MessageSquare, Settings, PanelLeftClose, PanelLeft, LogOut, Globe,
 } from "lucide-react";
 
 const navItems = [
@@ -10,6 +10,7 @@ const navItems = [
   { to: "/dashboard/stores",   label: "Stores",    icon: Store },
   { to: "/dashboard/alerts",   label: "Alerts",    icon: Bell },
   { to: "/dashboard/disputes", label: "Disputes",  icon: Shield },
+  { to: "/dashboard/uptime",   label: "Uptime",    icon: Globe },
   { to: "/dashboard/chat",     label: "AI Chat",   icon: MessageSquare },
   { to: "/dashboard/system",   label: "System",    icon: Settings },
 ];

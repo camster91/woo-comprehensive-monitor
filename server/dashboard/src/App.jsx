@@ -10,6 +10,7 @@ import Disputes from "./pages/Disputes";
 import System from "./pages/System";
 import Login from "./pages/Login";
 import Revenue from "./pages/Revenue";
+import Uptime from "./pages/Uptime";
 
 function useAuth() {
   const [token, setToken] = useState(() => localStorage.getItem("authToken") || null);
@@ -56,6 +57,7 @@ export default function App() {
             <Route path="stores" element={<Stores />} />
             <Route path="alerts" element={<Alerts />} />
             <Route path="disputes" element={<Disputes />} />
+            <Route path="uptime" element={<Uptime />} />
             <Route path="chat" element={<Chat />} />
             <Route path="system" element={<System onLogout={logout} />} />
           </Route>
