@@ -25,7 +25,8 @@ function createApp() {
   app.use("/api/track-woo-error", cors()); // wildcard for plugin callbacks
 
   const allowedOrigins = [
-    process.env.APP_FQDN || "https://woo.ashbi.ca",
+    process.env.APP_FQDN || "https://app.influencerslink.com",
+    "https://woo.ashbi.ca",
     "http://localhost:3000",
     "http://localhost:5173",
   ].concat(
