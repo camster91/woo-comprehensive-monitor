@@ -9,6 +9,8 @@ function authMiddleware(req, res, next) {
     "/track-woo-error",
     "/auth/request-code",
     "/auth/verify-code",
+    "/portal/login",
+    "/portal/logout",
   ];
   if (publicPaths.includes(req.path)) return next();
   if (req.path === "/stores" && req.method === "POST") return next();
