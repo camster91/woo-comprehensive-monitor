@@ -16,7 +16,7 @@ async function checkStore(store) {
 
   // HTTP check
   try {
-    const res = await axios.head(store.url, { timeout: 10000, maxRedirects: 3, validateStatus: () => true });
+    const res = await axios.head(store.url, { timeout: 15000, maxRedirects: 3, validateStatus: () => true });
     status_code = res.status;
     response_time_ms = Date.now() - start;
   } catch (err) {
