@@ -74,6 +74,34 @@ function shouldDeduplicate(key) {
 const emailCooldowns = new Map();
 const EMAIL_COOLDOWN_MS = 30 * 60 * 1000; // 30 minutes per store+type
 
+// Periodic cache cleanup — evict expired entries every 30 minutes
+function cleanupDedupCaches() {
+  const now = Date.now();
+  let alertEvicted = 0;
+  let emailEvicted = 0;
+
+  for (const key of Object.keys(lastAlertTimes)) {
+    if (now - lastAlertTimes[key] > DEDUP_INTERVAL_MS) {
+      delete lastAlertTimes[key];
+      alertEvicted++;
+    }
+  }
+
+  for (const [key, time] of emailCooldowns) {
+    if (now - time > EMAIL_COOLDOWN_MS) {
+      emailCooldowns.delete(key);
+      emailEvicted++;
+    }
+  }
+
+  if (alertEvicted + emailEvicted > 0) {
+    console.log(`[Cache] Cleaned dedup caches: ${alertEvicted} alert keys, ${emailEvicted} email keys`);
+  }
+}
+
+// Run cleanup every 30 minutes
+setInterval(cleanupDedupCaches, 30 * 60 * 1000).unref();
+
 function shouldSuppressEmail(storeId, type) {
   const key = `${storeId ?? "global"}:${type ?? "general"}`;
   const last = emailCooldowns.get(key);
