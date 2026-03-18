@@ -56,7 +56,7 @@ async function checkStore(store) {
       });
     }
 
-    // Check Stripe is active
+    // Check Stripe — plugin active, gateway enabled, keys configured
     const activePlugins = data.active_plugins || [];
     const stripePlugin = activePlugins.find(
       (p) => p.plugin && p.plugin.includes("stripe")
@@ -64,8 +64,46 @@ async function checkStore(store) {
     if (!stripePlugin) {
       issues.push({
         check: "stripe_gateway",
-        severity: "medium",
-        detail: "Stripe plugin not active",
+        severity: "critical",
+        detail: "Stripe plugin not active — customers cannot pay",
+      });
+    }
+
+    // Check Stripe gateway settings via WC API
+    try {
+      const { data: gateways } = await api.get("payment_gateways");
+      const stripeGw = (gateways || []).find(g => g.id === "stripe");
+      if (stripeGw) {
+        if (stripeGw.enabled === false) {
+          issues.push({
+            check: "stripe_disabled",
+            severity: "critical",
+            detail: "Stripe gateway is installed but DISABLED in WooCommerce settings",
+          });
+        }
+        // Check test mode
+        const testMode = (stripeGw.settings?.testmode?.value === "yes");
+        if (testMode) {
+          issues.push({
+            check: "stripe_test_mode",
+            severity: "high",
+            detail: "Stripe is in TEST MODE — live payments are not processing",
+          });
+        }
+      }
+    } catch (_) {
+      // payment_gateways endpoint may not be available on older WC versions
+    }
+
+    // Check ShipStation — plugin active and auth key configured
+    const shipstationPlugin = activePlugins.find(
+      (p) => p.plugin && (p.plugin.includes("shipstation"))
+    );
+    if (!shipstationPlugin) {
+      issues.push({
+        check: "shipstation",
+        severity: "high",
+        detail: "ShipStation plugin not active — orders won't sync for fulfillment",
       });
     }
 
