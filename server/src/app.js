@@ -3,6 +3,7 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const path = require("path");
 const rateLimit = require("express-rate-limit");
+const helmet = require("helmet");
 const { apiKeyMiddleware, authMiddleware } = require("./middleware/auth");
 
 function createApp() {
@@ -10,6 +11,20 @@ function createApp() {
 
   // Trust Coolify/Nginx reverse-proxy so req.ip returns real client IP
   app.set("trust proxy", 1);
+
+  // Security headers — CSP allows inline styles/scripts for React SPA
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https:"],
+        connectSrc: ["'self'", process.env.APP_FQDN || "https://app.influencerslink.com"],
+      },
+    },
+    crossOriginEmbedderPolicy: false, // breaks loading external images
+  }));
 
   // -------------------------------------------------------------------------
   // CORS

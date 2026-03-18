@@ -8,7 +8,7 @@
     "dev": "node --watch src/index.js",
     "dashboard:dev": "cd dashboard && npm run dev",
     "dashboard:build": "cd dashboard && npm run build",
-        "build": "echo 'No dashboard build needed for deployment'",
+    "build": "echo 'No dashboard build needed for deployment'",
     "migrate": "node src/migrate-from-json.js"
   },
   "keywords": [
@@ -28,6 +28,7 @@
     "dotenv": "^16.4.7",
     "express": "^5.2.1",
     "express-rate-limit": "^7.5.1",
+    "helmet": "^8.1.0",
     "node-cron": "^3.0.3",
     "p-limit": "^3.1.0"
   }
