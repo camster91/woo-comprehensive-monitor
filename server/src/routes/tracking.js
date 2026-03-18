@@ -321,6 +321,8 @@ router.post("/track-woo-error", async (req, res) => {
     const SUPPRESSED_ERRORS = [
       "elementorFrontendConfig",
       "undefined at undefined:undefined:undefined",
+      "navbar.classList",
+      "Attempted to assign to readonly property",
     ];
     if (SUPPRESSED_ERRORS.some(s => (error_message || "").includes(s))) {
       return res.json({ success: true, suppressed: true });

@@ -16,7 +16,7 @@
 const WooCommerceRestApi = require("@woocommerce/woocommerce-rest-api").default;
 const pLimit = require("p-limit");
 const { getAllStores } = require("./store-service");
-const { createAlert, shouldDeduplicate, queueAlertEmail } = require("./alert-service");
+const { createAlert, queueAlertEmail } = require("./alert-service");
 
 // Thresholds (in hours)
 const STUCK_PROCESSING_HOURS = 24;   // 24h in processing = stuck
@@ -24,6 +24,18 @@ const STUCK_PENDING_HOURS = 2;       // 2 hours in pending = payment issue
 const STUCK_ON_HOLD_HOURS = 24;      // 24h on-hold = needs attention
 
 let _workflowRunning = false;
+
+// Workflow alerts use a 24h dedup window (not the global 2h alert dedup)
+// so stuck orders only alert once per day, not every hour
+const _workflowDedup = {};
+const WORKFLOW_DEDUP_MS = 24 * 60 * 60 * 1000;
+
+function workflowShouldDedup(key) {
+  const now = Date.now();
+  if (_workflowDedup[key] && now - _workflowDedup[key] < WORKFLOW_DEDUP_MS) return true;
+  _workflowDedup[key] = now;
+  return false;
+}
 
 async function checkStoreOrders(store) {
   if (!store.consumer_key || !store.consumer_secret) return null;
@@ -190,7 +202,7 @@ async function checkAllStoreOrders() {
           // For stuck_processing, alert per order (dedupe by order ID)
           if (issue.type === "stuck_processing") {
             const dedupKey = `workflow_stuck_${store.id}_${issue.orderId}`;
-            if (!shouldDeduplicate(dedupKey)) {
+            if (!workflowShouldDedup(dedupKey)) {
               const subject = `Order Stuck: ${store.name} #${issue.orderId} (${issue.daysOld}d)`;
               createAlert({
                 subject,
@@ -208,7 +220,7 @@ async function checkAllStoreOrders() {
           } else {
             // Batch alerts (pending, on-hold, failed) — one per store per type
             const dedupKey = `workflow_${issue.type}_${store.id}`;
-            if (!shouldDeduplicate(dedupKey)) {
+            if (!workflowShouldDedup(dedupKey)) {
               const subject = `Workflow Alert: ${store.name} — ${issue.detail}`;
               createAlert({
                 subject,
