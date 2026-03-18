@@ -19,9 +19,9 @@ const { getAllStores } = require("./store-service");
 const { createAlert, shouldDeduplicate, queueAlertEmail } = require("./alert-service");
 
 // Thresholds (in hours)
-const STUCK_PROCESSING_HOURS = 72;   // 3 days in processing = stuck
+const STUCK_PROCESSING_HOURS = 24;   // 24h in processing = stuck
 const STUCK_PENDING_HOURS = 2;       // 2 hours in pending = payment issue
-const STUCK_ON_HOLD_HOURS = 48;      // 2 days on-hold = needs attention
+const STUCK_ON_HOLD_HOURS = 24;      // 24h on-hold = needs attention
 
 let _workflowRunning = false;
 
