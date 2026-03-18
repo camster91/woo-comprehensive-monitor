@@ -62,7 +62,16 @@ function createApp() {
   // Core middleware
   // -------------------------------------------------------------------------
   // Limit request body to 200 KB — protects against accidental or malicious large payloads
-  app.use(express.json({ limit: "200kb" }));
+  app.use(express.json({
+    limit: "200kb",
+    verify: (req, _res, buf) => {
+      // Store raw body for HMAC verification on tracking endpoint
+      // Note: at this middleware level, req.url is the full path (not mount-relative)
+      if (req.url === "/api/track-woo-error") {
+        req.rawBody = buf;
+      }
+    },
+  }));
   app.use(cookieParser());
 
   // -------------------------------------------------------------------------

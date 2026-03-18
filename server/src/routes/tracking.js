@@ -3,6 +3,8 @@ const { createAlert, shouldDeduplicate, queueAlertEmail } = require("../services
 const { upsertStore, findStoreByUrl, getStoreStats, updateStoreStats, touchStore } = require("../services/store-service");
 const { upsertDispute } = require("../services/dispute-service");
 const { run } = require("../db");
+const crypto = require("crypto");
+const TRACKING_SECRET = process.env.TRACKING_SECRET || "";
 
 const router = Router();
 
@@ -27,6 +29,20 @@ const VALID_TYPES = new Set([
 
 router.post("/track-woo-error", async (req, res) => {
   try {
+    // HMAC signature verification (when TRACKING_SECRET is configured)
+    if (TRACKING_SECRET) {
+      const sig = req.headers["x-wcm-signature"];
+      if (!sig || !req.rawBody) {
+        return res.status(401).json({ success: false, error: "Missing signature" });
+      }
+      const expected = crypto.createHmac("sha256", TRACKING_SECRET).update(req.rawBody).digest("hex");
+      const sigBuf = Buffer.from(sig, "hex");
+      const expectedBuf = Buffer.from(expected, "hex");
+      if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
+        return res.status(401).json({ success: false, error: "Invalid signature" });
+      }
+    }
+
     const { type, error_message, site, url, time } = req.body;
 
     // Reject unknown/missing event types to prevent junk alerts
