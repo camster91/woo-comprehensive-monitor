@@ -122,23 +122,35 @@ async function checkAllStores() {
 
 function getUptimeSummary() {
   const stores = storeService.getAllStores();
-  const summary = [];
 
-  for (const store of stores) {
-    const latest = get(
-      "SELECT * FROM uptime_checks WHERE store_id = ? ORDER BY checked_at DESC LIMIT 1",
-      [store.id]
-    );
-    const totalChecks = get(
-      "SELECT COUNT(*) as total FROM uptime_checks WHERE store_id = ? AND checked_at >= datetime('now', '-24 hours')",
-      [store.id]
-    )?.total || 0;
-    const upChecks = get(
-      "SELECT COUNT(*) as up FROM uptime_checks WHERE store_id = ? AND checked_at >= datetime('now', '-24 hours') AND status_code >= 200 AND status_code < 400",
-      [store.id]
-    )?.up || 0;
+  // Batch: latest check per store
+  const latestChecks = all(
+    `SELECT u.* FROM uptime_checks u
+     INNER JOIN (
+       SELECT store_id, MAX(checked_at) as max_checked
+       FROM uptime_checks GROUP BY store_id
+     ) latest ON u.store_id = latest.store_id AND u.checked_at = latest.max_checked`
+  );
+  const latestMap = {};
+  for (const c of latestChecks) latestMap[c.store_id] = c;
 
-    summary.push({
+  // Batch: 24h uptime counts per store
+  const uptimeCounts = all(
+    `SELECT store_id,
+            COUNT(*) as total,
+            SUM(CASE WHEN status_code >= 200 AND status_code < 400 THEN 1 ELSE 0 END) as up
+     FROM uptime_checks
+     WHERE checked_at >= datetime('now', '-24 hours')
+     GROUP BY store_id`
+  );
+  const uptimeMap = {};
+  for (const c of uptimeCounts) uptimeMap[c.store_id] = c;
+
+  const summary = stores.map(store => {
+    const latest = latestMap[store.id];
+    const counts = uptimeMap[store.id] || { total: 0, up: 0 };
+
+    return {
       store_id: store.id,
       store_name: store.name,
       store_url: store.url,
@@ -146,10 +158,10 @@ function getUptimeSummary() {
       response_time_ms: latest?.response_time_ms || null,
       ssl_expiry_date: latest?.ssl_expiry_date || null,
       ssl_days_remaining: latest?.ssl_days_remaining || null,
-      uptime_24h: totalChecks > 0 ? parseFloat(((upChecks / totalChecks) * 100).toFixed(1)) : null,
+      uptime_24h: counts.total > 0 ? parseFloat(((counts.up / counts.total) * 100).toFixed(1)) : null,
       last_checked: latest?.checked_at || null,
-    });
-  }
+    };
+  });
 
   const up = summary.filter(s => s.status_code && s.status_code >= 200 && s.status_code < 400).length;
   const down = summary.filter(s => s.status_code === 0 || (s.status_code && s.status_code >= 500)).length;

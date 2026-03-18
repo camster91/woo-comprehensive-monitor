@@ -95,6 +95,9 @@ function initDB(dbPath) {
     }
   }
 
+  // Performance index for uptime batch queries
+  _db.exec("CREATE INDEX IF NOT EXISTS idx_uptime_store_checked ON uptime_checks(store_id, checked_at)");
+
   // Graceful shutdown: flush WAL on exit
   process.on("exit", () => {
     try {
