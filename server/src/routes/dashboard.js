@@ -5,7 +5,16 @@ const { all } = require("../db");
 
 const router = Router();
 
+// Cache dashboard response for 30s — prevents DB hammering on auto-refresh
+let _dashCache = null;
+let _dashCacheTime = 0;
+const DASH_CACHE_TTL = 30 * 1000;
+
 router.get("/dashboard", (req, res) => {
+  const now = Date.now();
+  if (_dashCache && now - _dashCacheTime < DASH_CACHE_TTL) {
+    return res.json(_dashCache);
+  }
   const stores = storeService.getAllStores();
   const { alerts: recentAlerts, total: totalAlerts } = alertService.getAlerts({ limit: 100 });
   const stats = alertService.getAlertStats();
@@ -83,7 +92,7 @@ router.get("/dashboard", (req, res) => {
     alertTrends.push({ date: dateStr, total: r.total, critical: r.critical, high: r.high, medium: r.medium });
   }
 
-  res.json({
+  const response = {
     status: "ok",
     version: "3.1.0",
     overview: {
@@ -99,7 +108,11 @@ router.get("/dashboard", (req, res) => {
     },
     stores: enhancedStores,
     recentAlerts,
-  });
+  };
+
+  _dashCache = response;
+  _dashCacheTime = Date.now();
+  res.json(response);
 });
 
 module.exports = router;
