@@ -43,6 +43,23 @@ async function start() {
     }
   }
 
+  // Encrypt existing plaintext credentials (one-time migration)
+  const { isEnabled: cryptoEnabled, encrypt: encryptCred } = require("./services/crypto-service");
+  if (cryptoEnabled()) {
+    const allStoresRaw = require("./db").all("SELECT id, consumer_key, consumer_secret FROM stores");
+    let migrated = 0;
+    for (const s of allStoresRaw) {
+      // Skip if already encrypted (contains colons) or null
+      if (!s.consumer_key || s.consumer_key.includes(":")) continue;
+      require("./db").run(
+        "UPDATE stores SET consumer_key = ?, consumer_secret = ? WHERE id = ?",
+        [encryptCred(s.consumer_key), encryptCred(s.consumer_secret), s.id]
+      );
+      migrated++;
+    }
+    if (migrated > 0) console.log(`[Crypto] Encrypted credentials for ${migrated} stores`);
+  }
+
   const app = createApp();
 
   // Health checks every 15 minutes — staggered, not all at once

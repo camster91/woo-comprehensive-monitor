@@ -9,6 +9,7 @@
  */
 
 const { run, get, all, insert } = require("../db");
+const { encrypt, decrypt } = require("./crypto-service");
 
 // ---------------------------------------------------------------------------
 // Store cache — invalidated on any write, TTL as safety fallback
@@ -27,7 +28,13 @@ function getAllStores() {
   if (_storeCache && now - _storeCacheTime < STORE_CACHE_TTL) {
     return _storeCache;
   }
-  _storeCache = all("SELECT * FROM stores ORDER BY name");
+  const rows = all("SELECT * FROM stores ORDER BY name");
+  // Decrypt credentials if encryption is enabled
+  _storeCache = rows.map(row => ({
+    ...row,
+    consumer_key: decrypt(row.consumer_key),
+    consumer_secret: decrypt(row.consumer_secret),
+  }));
   _storeCacheTime = now;
   return _storeCache;
 }
@@ -61,8 +68,8 @@ function upsertStore({
     const params = [];
     if (name)               { fields.push("name = ?");                params.push(name); }
     if (url)                { fields.push("url = ?");                 params.push(url); }
-    if (consumerKey)        { fields.push("consumer_key = ?");        params.push(consumerKey); }
-    if (consumerSecret)     { fields.push("consumer_secret = ?");     params.push(consumerSecret); }
+    if (consumerKey)        { fields.push("consumer_key = ?");        params.push(encrypt(consumerKey)); }
+    if (consumerSecret)     { fields.push("consumer_secret = ?");     params.push(encrypt(consumerSecret)); }
     if (pluginVersion)      { fields.push("plugin_version = ?");      params.push(pluginVersion); }
     if (woocommerceVersion) { fields.push("woocommerce_version = ?"); params.push(woocommerceVersion); }
     if (wordpressVersion)   { fields.push("wordpress_version = ?");   params.push(wordpressVersion); }
@@ -81,7 +88,7 @@ function upsertStore({
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id, name, url,
-      consumerKey || null, consumerSecret || null,
+      consumerKey ? encrypt(consumerKey) : null, consumerSecret ? encrypt(consumerSecret) : null,
       pluginVersion || null, woocommerceVersion || null,
       wordpressVersion || null, phpVersion || null,
     ]
@@ -94,7 +101,9 @@ function upsertStore({
 }
 
 function getStore(id) {
-  return get("SELECT * FROM stores WHERE id = ?", [id]);
+  const row = get("SELECT * FROM stores WHERE id = ?", [id]);
+  if (!row) return null;
+  return { ...row, consumer_key: decrypt(row.consumer_key), consumer_secret: decrypt(row.consumer_secret) };
 }
 
 function removeStore(id) {
@@ -124,7 +133,7 @@ function updateStoreSyncConfig(id, syncConfig) {
 function updateStoreCredentials(id, consumerKey, consumerSecret) {
   run(
     "UPDATE stores SET consumer_key = ?, consumer_secret = ?, updated_at = datetime('now') WHERE id = ?",
-    [consumerKey, consumerSecret, id]
+    [encrypt(consumerKey), encrypt(consumerSecret), id]
   );
   invalidateStoreCache();
 }
