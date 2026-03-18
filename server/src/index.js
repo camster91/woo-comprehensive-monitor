@@ -64,7 +64,7 @@ async function start() {
 
   // Health checks every 15 minutes — staggered, not all at once
   let _healthRunning = false;
-  cron.schedule("*/15 * * * *", async () => {
+  cron.schedule("5,20,35,50 * * * *", async () => {
     if (_healthRunning) { console.log("[Health] Skipping — previous run still active"); return; }
     _healthRunning = true;
     try { await checkAllStores(); } finally { _healthRunning = false; }
@@ -75,7 +75,7 @@ async function start() {
 
   // Revenue sync every 30 minutes
   const { syncAllStores: syncRevenue } = require("./services/revenue-service");
-  cron.schedule("*/30 * * * *", () => {
+  cron.schedule("15,45 * * * *", () => {
     syncRevenue().catch(e => console.error("[Revenue]", e.message));
   });
 
@@ -134,13 +134,13 @@ async function start() {
 
   // Inventory sync every 30 minutes (piggybacks with revenue)
   const { syncAllStores: syncInventory } = require("./services/inventory-service");
-  cron.schedule("*/30 * * * *", () => {
+  cron.schedule("25,55 * * * *", () => {
     syncInventory().catch(e => console.error("[Inventory]", e.message));
   });
 
   // Trigger WP-Cron on all sites every 15 minutes (staggered, sequential)
   // Sites have DISABLE_WP_CRON=true, so cron only runs when we trigger it here
-  cron.schedule("*/15 * * * *", async () => {
+  cron.schedule("10,40 * * * *", async () => {
     const stores = require("./services/store-service").getAllStores();
     const axios = require("axios");
     for (const store of stores) {
