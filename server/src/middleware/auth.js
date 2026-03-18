@@ -26,21 +26,25 @@ function authMiddleware(req, res, next) {
 }
 
 function apiKeyMiddleware(req, res, next) {
-  // GET requests always allowed
-  if (req.method === "GET") return next();
-
   // Plugin endpoints skip API key check (path relative to /api mount)
   if (req.path === "/track-woo-error") return next();
 
-  // Dashboard auth token
+  // Public endpoints that don't need any auth
+  const publicPaths = ["/health", "/auth/request-code", "/auth/verify-code"];
+  if (publicPaths.includes(req.path)) return next();
+  if (req.path.startsWith("/portal/")) return next();
+
+  // Dashboard auth token (covers both GET and POST)
   const authToken = req.headers["x-auth-token"] || req.query?.authToken;
   if (authToken && validateToken(authToken)) return next();
 
-  // API key
+  // API key (covers both GET and POST)
   const apiKey = req.headers["x-api-key"] || req.query?.apiKey;
   const validApiKey = process.env.API_KEY;
+  if (validApiKey && apiKey === validApiKey) return next();
+
+  // If no API_KEY is configured, allow (backward compat for setups without API key)
   if (!validApiKey) return next();
-  if (apiKey === validApiKey) return next();
 
   return res.status(401).json({ error: "Invalid or missing API key" });
 }
