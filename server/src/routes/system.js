@@ -4,6 +4,7 @@ const storeService = require("../services/store-service");
 const alertService = require("../services/alert-service");
 const { checkAllStores } = require("../services/health-checker");
 const authService = require("../services/auth-service");
+const { getCronStats } = require("../services/cron-telemetry");
 
 const GITHUB_REPO = "camster91/woo-comprehensive-monitor";
 
@@ -42,6 +43,7 @@ router.get("/system/config", (req, res) => {
     node_version: process.version,
     memory: process.memoryUsage(),
     uptime: process.uptime(),
+    cronStats: getCronStats(),
   });
 });
 

@@ -7,6 +7,7 @@ const path = require("path");
 const { checkAllStores, checkSilentStores } = require("./services/health-checker");
 const { cleanupExpired } = require("./services/auth-service");
 const { clearAlerts } = require("./services/alert-service");
+const { timedCron } = require("./services/cron-telemetry");
 
 const PORT = process.env.PORT || 3000;
 
@@ -67,7 +68,7 @@ async function start() {
   cron.schedule("5,20,35,50 * * * *", async () => {
     if (_healthRunning) { console.log("[Health] Skipping — previous run still active"); return; }
     _healthRunning = true;
-    try { await checkAllStores(); } finally { _healthRunning = false; }
+    try { await timedCron("health", () => checkAllStores()); } finally { _healthRunning = false; }
   });
 
   // Silent-store detection every hour (separate from WooCommerce API health checks)
@@ -76,7 +77,7 @@ async function start() {
   // Revenue sync every 30 minutes
   const { syncAllStores: syncRevenue } = require("./services/revenue-service");
   cron.schedule("15,45 * * * *", () => {
-    syncRevenue().catch(e => console.error("[Revenue]", e.message));
+    timedCron("revenue", () => syncRevenue());
   });
 
   // Auto-submit dispute evidence every 15 min (offset from health check)
@@ -129,27 +130,29 @@ async function start() {
   // Uptime checks every 5 minutes (offset to :02, :07, etc.)
   const { checkAllStores: checkUptime } = require("./services/uptime-service");
   cron.schedule("2,7,12,17,22,27,32,37,42,47,52,57 * * * *", () => {
-    checkUptime().catch(e => console.error("[Uptime]", e.message));
+    timedCron("uptime", () => checkUptime());
   });
 
   // Inventory sync every 30 minutes (piggybacks with revenue)
   const { syncAllStores: syncInventory } = require("./services/inventory-service");
   cron.schedule("25,55 * * * *", () => {
-    syncInventory().catch(e => console.error("[Inventory]", e.message));
+    timedCron("inventory", () => syncInventory());
   });
 
   // Trigger WP-Cron on all sites every 15 minutes (staggered, sequential)
   // Sites have DISABLE_WP_CRON=true, so cron only runs when we trigger it here
-  cron.schedule("10,40 * * * *", async () => {
-    const stores = require("./services/store-service").getAllStores();
-    const axios = require("axios");
-    for (const store of stores) {
-      try {
-        await axios.get(`${store.url}/wp-cron.php?doing_wp_cron`, { timeout: 10000 });
-      } catch (_) {}
-      await new Promise(r => setTimeout(r, 2000)); // 2s gap between sites
-    }
-    console.log(`[WP-Cron] Triggered ${stores.length} sites`);
+  cron.schedule("10,40 * * * *", () => {
+    timedCron("wp-cron", async () => {
+      const stores = require("./services/store-service").getAllStores();
+      const axios = require("axios");
+      for (const store of stores) {
+        try {
+          await axios.get(`${store.url}/wp-cron.php?doing_wp_cron`, { timeout: 10000 });
+        } catch (_) {}
+        await new Promise(r => setTimeout(r, 2000));
+      }
+      console.log(`[WP-Cron] Triggered ${stores.length} sites`);
+    });
   });
 
   // Cleanup expired auth tokens daily at 3am
