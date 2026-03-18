@@ -10,8 +10,20 @@ router.get("/dashboard", (req, res) => {
   const { alerts: recentAlerts, total: totalAlerts } = alertService.getAlerts({ limit: 100 });
   const stats = alertService.getAlertStats();
 
+  // Batch query all store_stats in one go instead of N+1
+  const allStats = all("SELECT * FROM store_stats");
+  const statsMap = {};
+  for (const row of allStats) {
+    statsMap[row.store_id] = {
+      ...row,
+      features: JSON.parse(row.features || "{}"),
+      admin_notices: JSON.parse(row.admin_notices || "[]"),
+      error_counts: JSON.parse(row.error_counts || "{}"),
+    };
+  }
+
   const enhancedStores = stores.map(store => {
-    const storeStats = storeService.getStoreStats(store.id);
+    const storeStats = statsMap[store.id] || null;
     const lastSeen = store.last_seen ? new Date(store.last_seen) : null;
     const hoursAgo = lastSeen ? (Date.now() - lastSeen.getTime()) / (1000 * 60 * 60) : Infinity;
     let healthStatus = "unknown";
