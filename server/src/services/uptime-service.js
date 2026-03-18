@@ -97,7 +97,7 @@ async function checkAllStores() {
             dedupKey: `ssl_${store.id}`,
           });
         }
-        if (check.response_time_ms > 5000 && check.status_code > 0) {
+        if (check.response_time_ms > 10000 && check.status_code > 0) {
           createAlert({
             subject: `SLOW RESPONSE: ${store.name}`,
             message: `${store.url} took ${check.response_time_ms}ms to respond`,
