@@ -316,6 +316,16 @@ router.post("/track-woo-error", async (req, res) => {
     }
 
     // --- Regular frontend errors ---
+
+    // Suppress known harmless JS errors (Elementor frontend config on non-Elementor pages, undefined errors)
+    const SUPPRESSED_ERRORS = [
+      "elementorFrontendConfig",
+      "undefined at undefined:undefined:undefined",
+    ];
+    if (SUPPRESSED_ERRORS.some(s => (error_message || "").includes(s))) {
+      return res.json({ success: true, suppressed: true });
+    }
+
     const dedupKey = `error_${site}_${type}_${(error_message || "").substring(0, 50)}`;
     if (shouldDeduplicate(dedupKey)) {
       return res.json({ success: true, deduplicated: true });
