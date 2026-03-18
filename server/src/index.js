@@ -139,6 +139,12 @@ async function start() {
     timedCron("inventory", () => syncInventory());
   });
 
+  // Order workflow monitor — hourly at :45 (checks stuck/failed orders across all stores)
+  const { checkAllStoreOrders } = require("./services/order-workflow-service");
+  cron.schedule("45 * * * *", () => {
+    timedCron("workflow", () => checkAllStoreOrders());
+  });
+
   // Trigger WP-Cron on all sites every 15 minutes (staggered, sequential)
   // Sites have DISABLE_WP_CRON=true, so cron only runs when we trigger it here
   cron.schedule("10,40 * * * *", () => {
@@ -225,6 +231,9 @@ async function start() {
 
     // Initial inventory sync 120s after boot
     setTimeout(() => syncInventory().catch(e => console.error("[Inventory]", e.message)), 120 * 1000);
+
+    // Initial workflow check 150s after boot
+    setTimeout(() => checkAllStoreOrders().catch(e => console.error("[Workflow]", e.message)), 150 * 1000);
   });
 }
 
